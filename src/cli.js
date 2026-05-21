@@ -55,6 +55,7 @@ async function runCommand(args) {
   }
 
   await preflightRun(options);
+  await preflightMeetingInfo({ sourceDir: baseDir, inputFiles, options });
 
   console.log("[1/7] 작업 폴더 생성");
   const workspace = await createWorkspace({ inputFiles, baseDir });
@@ -137,6 +138,27 @@ async function runCommand(args) {
   console.log(`작업 폴더: ${workspace.path}`);
   console.log(options["skip-agent"] ? "다음 단계: meeting-harness resume 또는 meeting-harness render output/meeting.md" : "완료: README_결과물.md를 확인하세요.");
   return workspace.path;
+}
+
+async function preflightMeetingInfo({ sourceDir, inputFiles = [], options = {} }) {
+  if (process.stdin.isTTY || options.yes || options["no-prompt"]) return;
+  let combined = "";
+  let foundInfoFile = false;
+  for (const name of infoFileNames) {
+    try {
+      combined += `\n${await readFile(path.join(sourceDir, name), "utf8")}`;
+      foundInfoFile = true;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  const parsed = parseMeetingInfoText(combined);
+  const inferred = inferMeetingInfo({ sourceDir, workspacePath: sourceDir, inputFiles });
+  const needsInfo = !foundInfoFile || !parsed.contentType || !parsed.attendees?.length;
+  const canAutoConfirmLecture = !foundInfoFile && inferred.confidence === "high" && inferred.contentType === "1인 강의/연수";
+  if (needsInfo && !canAutoConfirmLecture) {
+    throw new Error(missingMeetingInfoMessage());
+  }
 }
 
 async function setupCommand(args = []) {
@@ -420,11 +442,19 @@ async function collectMeetingInfo({ sourceDir, workspacePath, inputFiles = [], o
     printInferredLectureConfirmation(inferred);
   }
 
-  if (!shouldAsk && (!foundInfoFile || !parsed.contentType || !parsed.attendees?.length)) {
+  if (!shouldAsk && !options.yes && !options["no-prompt"] && (!foundInfoFile || !parsed.contentType || !parsed.attendees?.length)) {
     if (!foundInfoFile && inferred.confidence === "high" && inferred.contentType === "1인 강의/연수") {
       printInferredLectureConfirmation(inferred);
     } else {
-      console.log("[회의 정보] 정보 파일 또는 발화자 정보가 부족하여 추천 기본값으로 진행합니다.");
+      throw new Error(missingMeetingInfoMessage());
+    }
+  }
+
+  if (!shouldAsk && (options.yes || options["no-prompt"]) && (!foundInfoFile || !parsed.contentType || !parsed.attendees?.length)) {
+    if (!foundInfoFile && inferred.confidence === "high" && inferred.contentType === "1인 강의/연수") {
+      printInferredLectureConfirmation(inferred);
+    } else {
+      console.log("[회의 정보] --yes/--no-prompt 옵션에 따라 추천 기본값으로 진행합니다.");
       console.log(`[회의 정보] 자료 유형: ${parsed.contentType ?? inferred.contentType}`);
       console.log(`[회의 정보] 발화자/참석자: ${(parsed.attendees ?? inferred.attendees).join(", ") || "미상"}`);
     }
@@ -444,6 +474,20 @@ async function collectMeetingInfo({ sourceDir, workspacePath, inputFiles = [], o
   await mkdir(path.join(workspacePath, "config"), { recursive: true });
   await writeFile(path.join(workspacePath, "config", "meeting_info.json"), JSON.stringify(info, null, 2), "utf8");
   return info;
+}
+
+function missingMeetingInfoMessage() {
+  return [
+    "회의 정보가 부족합니다.",
+    "현재 실행 환경에서는 CLI가 대화형 질문을 표시할 수 없습니다.",
+    "meeting_info.txt를 입력 파일과 같은 폴더에 만들거나, 사용자에게 자료 유형과 참석자/발화자 정보를 확인한 뒤 다시 실행하세요.",
+    "기본값으로 계속 진행하려면 --yes 또는 --no-prompt 옵션을 명시적으로 사용하세요.",
+    "필요한 항목:",
+    "- 자료 유형: 회의 / 1인 강의/연수 / 세미나 등",
+    "- 제목/회의명",
+    "- 참석자/발화자 정보",
+    "- 특이사항"
+  ].join("\n");
 }
 
 function printInferredLectureConfirmation(inferred) {

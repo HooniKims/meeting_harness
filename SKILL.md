@@ -75,6 +75,13 @@ speakers.txt
 
 If one exists, let the CLI use it. If the CLI asks for missing fields, answer only from user-provided context. Do not invent meeting metadata.
 
+If the CLI fails because meeting information is missing in a non-interactive shell, stop and ask the user for the missing fields. Then create `meeting_info.txt` in the media folder and rerun the same command. Required fields are:
+
+- 자료 유형
+- 제목/회의명
+- 참석자/발화자 정보
+- 특이사항, if any
+
 If no meeting info file exists and the format is unclear, ask the user briefly before running when the chat context allows it:
 
 - Is this a meeting, a one-person lecture/training, or another format?
@@ -144,6 +151,8 @@ meeting-harness resume "<workspace-path>"
 ```
 
 Use `.meeting-harness/state.json` only to understand the current state. Do not manually rewrite it unless fixing a clear harness bug.
+
+If no workspace was created because meeting information was missing, ask the user for the missing meeting info first instead of running `resume`.
 
 ## After Editing meeting.md
 
