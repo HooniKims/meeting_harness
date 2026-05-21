@@ -70,6 +70,14 @@ CLI로 직접 실행할 수 있습니다.
 meeting-harness run meeting.mp4
 ```
 
+`run`은 먼저 실행 환경을 점검합니다. Python, ffmpeg, Whisper 관련 패키지가 준비되지 않았으면 작업 폴더를 만들기 전에 멈추고 installer 재실행을 안내합니다. 그래서 환경 문제만으로 빈 작업 폴더가 계속 쌓이지 않도록 설계되어 있습니다.
+
+같은 입력 파일로 실패하거나 진행 중인 작업 폴더가 이미 있으면 새 폴더를 만들지 않고 기존 작업 폴더를 재사용해 이어서 실행합니다. 정말 새 작업으로 다시 시작하고 싶을 때만 다음 옵션을 사용합니다.
+
+```bash
+meeting-harness run meeting.mp4 --new
+```
+
 여러 파일이면 순서대로 넣습니다.
 
 ```bash
@@ -173,6 +181,8 @@ output/verification_report.md
 ```bash
 meeting-harness resume
 ```
+
+작업 폴더를 지정하지 않으면 현재 폴더에서 가장 최근의 meeting-harness 작업 폴더를 찾아 이어서 실행합니다. 전사 단계에서 실패했을 때도 기존 `work/audio.wav`를 활용해 전사부터 다시 시작하고, 가능하면 이후 회의록 작성, DOCX/PDF 생성, 검증까지 이어갑니다.
 
 Markdown을 직접 수정한 뒤 DOCX/PDF만 다시 만들고 싶으면 다음처럼 실행합니다.
 

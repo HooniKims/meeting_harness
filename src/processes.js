@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,19 +50,28 @@ export async function runPythonWorker(scriptName, args) {
   });
 }
 
-function resolvePythonCommand() {
+export function resolvePythonCommand() {
   if (process.env.MEETING_HARNESS_PYTHON && existsSync(process.env.MEETING_HARNESS_PYTHON)) {
     return { command: process.env.MEETING_HARNESS_PYTHON, prefixArgs: [] };
   }
 
   const installRoot = path.resolve(moduleDir, "..", "..");
-  const venvPython =
+  const homeInstallRoot = path.join(os.homedir(), ".meeting-harness");
+  const venvCandidates =
     process.platform === "win32"
-      ? path.join(installRoot, "venv", "Scripts", "python.exe")
-      : path.join(installRoot, "venv", "bin", "python");
+      ? [
+          path.join(installRoot, "venv", "Scripts", "python.exe"),
+          path.join(homeInstallRoot, "venv", "Scripts", "python.exe")
+        ]
+      : [
+          path.join(installRoot, "venv", "bin", "python"),
+          path.join(homeInstallRoot, "venv", "bin", "python")
+        ];
 
-  if (existsSync(venvPython)) {
-    return { command: venvPython, prefixArgs: [] };
+  for (const candidate of venvCandidates) {
+    if (existsSync(candidate)) {
+      return { command: candidate, prefixArgs: [] };
+    }
   }
 
   return { command: process.platform === "win32" ? "python" : "python3", prefixArgs: [] };

@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
@@ -6,8 +7,8 @@ import { stdin as input, stdout as output } from "node:process";
 import { detectAgent, runAgentToWriteMeeting } from "./agent.js";
 import { writeAgentInstructions, writeResultReadme } from "./artifacts.js";
 import { parseMeetingInfoText } from "./core.js";
-import { createWorkspace, readState, writeState } from "./workspace.js";
-import { extractAudio, runPythonWorker, transcribeAudio } from "./processes.js";
+import { createWorkspace, findReusableWorkspace, readState, writeState } from "./workspace.js";
+import { extractAudio, resolvePythonCommand, runPythonWorker, transcribeAudio } from "./processes.js";
 
 const infoFileNames = [
   "meeting_info.txt",
@@ -42,58 +43,90 @@ async function runCommand(args) {
   const baseDir = options["base-dir"] ? path.resolve(options["base-dir"]) : process.cwd();
   const inputFiles = positional.map((item) => path.resolve(item));
 
+  if (!options.new && !options["force-new"]) {
+    const reusableWorkspace = await findReusableWorkspace({ inputFiles, baseDir });
+    if (reusableWorkspace) {
+      console.log(`[1/7] 기존 작업 폴더 재사용: ${reusableWorkspace}`);
+      console.log("같은 입력 파일의 실패/진행 중 작업을 발견해 새 폴더를 만들지 않고 이어서 실행합니다.");
+      return resumeCommand([reusableWorkspace, ...forwardResumeOptions(options)]);
+    }
+  }
+
+  await preflightRun(options);
+
   console.log("[1/7] 작업 폴더 생성");
   const workspace = await createWorkspace({ inputFiles, baseDir });
+  let activeStep = "create_workspace";
 
-  await collectMeetingInfo({ sourceDir: baseDir, workspacePath: workspace.path, inputFiles, options });
-  const preferredAgent = options.agent ?? "auto";
-  const detectedAgent = detectAgent({ preferred: preferredAgent }) ?? "auto";
-  await writeAgentInstructions(workspace.path, { preferredAgent: detectedAgent });
-  await writeResultReadme(workspace.path);
-
-  if (options["skip-media"]) {
-    await writeFile(path.join(workspace.path, "work", "transcript.txt"), "", "utf8");
-    await writeFile(path.join(workspace.path, "work", "transcript.json"), "[]\n", "utf8");
-  } else {
-    console.log("[2/7] 음성 추출");
-    await extractAudio(workspace.path);
-    console.log("[3/7] 전사");
-    await transcribeAudio(workspace.path, {
-      model: options.model ?? "large-v3",
-      computeType: options["compute-type"] ?? "auto",
-      language: options.language ?? "ko"
+  try {
+    await writeState(workspace.path, {
+      ...(await readState(workspace.path)),
+      run_options: {
+        skip_agent: Boolean(options["skip-agent"]),
+        skip_media: Boolean(options["skip-media"]),
+        agent: options.agent ?? "auto"
+      }
     });
-  }
+    activeStep = "collect_meeting_info";
+    await collectMeetingInfo({ sourceDir: baseDir, workspacePath: workspace.path, inputFiles, options });
+    await markCompleted(workspace.path, activeStep);
+    const preferredAgent = options.agent ?? "auto";
+    const detectedAgent = detectAgent({ preferred: preferredAgent }) ?? "auto";
+    activeStep = "prepare_agent_files";
+    await writeAgentInstructions(workspace.path, { preferredAgent: detectedAgent });
+    await writeResultReadme(workspace.path);
+    await markCompleted(workspace.path, activeStep);
 
-  if (!options["skip-agent"]) {
-    console.log("[4/7] 회의록 작성");
-    const selectedAgent = await runAgentToWriteMeeting({ agent: preferredAgent, workspacePath: workspace.path });
-    console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
-    console.log("[5/7] DOCX/PDF 생성");
-    await renderCommand([path.join(workspace.path, "output", "meeting.md")]);
-    console.log("[7/7] 생성 결과 검증");
-    await verifyCommand([workspace.path]);
-  } else {
-    await writeMeetingTemplate(workspace.path);
-  }
-
-  await writeState(workspace.path, {
-    ...(await readState(workspace.path)),
-    status: "ready",
-    current_step: options["skip-agent"] ? "ready_for_agent" : "complete",
-    completed_steps: options["skip-agent"]
-      ? ["create_workspace", "collect_meeting_info", "prepare_agent_files"]
-      : ["create_workspace", "collect_meeting_info", "prepare_agent_files", "agent_write_md", "render", "verify"],
-    artifacts: {
-      workspace: workspace.path,
-      meeting_info: "config/meeting_info.json",
-      transcript: "work/transcript.txt",
-      meeting_md: "output/meeting.md",
-      meeting_docx: "output/meeting.docx",
-      meeting_pdf: "output/meeting.pdf",
-      verification_report: "output/verification_report.md"
+    if (options["skip-media"]) {
+      activeStep = "transcribe";
+      await writeFile(path.join(workspace.path, "work", "transcript.txt"), "", "utf8");
+      await writeFile(path.join(workspace.path, "work", "transcript.json"), "[]\n", "utf8");
+      await markCompleted(workspace.path, activeStep);
+    } else {
+      console.log("[2/7] 음성 추출");
+      activeStep = "extract_audio";
+      await extractAudio(workspace.path);
+      await markCompleted(workspace.path, activeStep);
+      console.log("[3/7] 전사");
+      activeStep = "transcribe";
+      await transcribeAudio(workspace.path, {
+        model: options.model ?? "large-v3",
+        computeType: options["compute-type"] ?? "auto",
+        language: options.language ?? "ko"
+      });
+      await markCompleted(workspace.path, activeStep);
     }
-  });
+
+    if (!options["skip-agent"]) {
+      console.log("[4/7] 회의록 작성");
+      activeStep = "agent_write_md";
+      const selectedAgent = await runAgentToWriteMeeting({ agent: preferredAgent, workspacePath: workspace.path });
+      await markCompleted(workspace.path, activeStep);
+      console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
+      console.log("[5/7] DOCX/PDF 생성");
+      activeStep = "render";
+      await renderCommand([path.join(workspace.path, "output", "meeting.md")]);
+      await markCompleted(workspace.path, activeStep);
+      console.log("[7/7] 생성 결과 검증");
+      activeStep = "verify";
+      await verifyCommand([workspace.path]);
+      await markCompleted(workspace.path, activeStep);
+    } else {
+      activeStep = "ready_for_agent";
+      await writeMeetingTemplate(workspace.path);
+    }
+
+    await writeState(workspace.path, {
+      ...(await readState(workspace.path)),
+      status: "ready",
+      current_step: options["skip-agent"] ? "ready_for_agent" : "complete",
+      failed_step: null,
+      artifacts: defaultArtifacts(workspace.path)
+    });
+  } catch (error) {
+    await markFailed(workspace.path, activeStep, error);
+    throw error;
+  }
 
   console.log(`작업 폴더: ${workspace.path}`);
   console.log(options["skip-agent"] ? "다음 단계: meeting-harness resume 또는 meeting-harness render output/meeting.md" : "완료: README_결과물.md를 확인하세요.");
@@ -107,6 +140,51 @@ async function setupCommand() {
   console.log(`Claude CLI: ${detectAgent({ preferred: "claude" }) ? "감지됨" : "없음"}`);
   console.log(`기본 에이전트: ${detectAgent() ?? "없음"}`);
   console.log("Python, ffmpeg, Whisper/DOCX/PDF 패키지는 installer와 실행 단계에서 점검합니다.");
+}
+
+async function preflightRun(options = {}) {
+  if (options["skip-media"] && options["skip-agent"]) return;
+
+  const problems = [];
+  if (!options["skip-media"] && !commandWorks("ffmpeg", ["-version"])) {
+    problems.push("ffmpeg를 찾을 수 없습니다. installer를 다시 실행해 ffmpeg를 설치하세요.");
+  }
+
+  const python = resolvePythonCommand();
+  if (!commandWorks(python.command, [...python.prefixArgs, "--version"])) {
+    problems.push("Python 실행 환경을 찾을 수 없습니다. installer를 다시 실행해 하네스 전용 Python 환경을 만드세요.");
+  }
+
+  if (!options["skip-media"] && commandWorks(python.command, [...python.prefixArgs, "--version"])) {
+    const importCheck = spawnSync(
+      python.command,
+      [...python.prefixArgs, "-c", "import faster_whisper, docx, reportlab"],
+      { encoding: "utf8" }
+    );
+    if (importCheck.status !== 0) {
+      problems.push("Whisper/DOCX/PDF Python 패키지가 하네스 Python 환경에 설치되어 있지 않습니다. installer를 다시 실행하세요.");
+    }
+  }
+
+  if (problems.length) {
+    throw new Error(["실행 전 환경 점검 실패:", ...problems.map((item) => `- ${item}`)].join("\n"));
+  }
+}
+
+function commandWorks(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  return !result.error && result.status === 0;
+}
+
+function forwardResumeOptions(options = {}) {
+  const args = [];
+  for (const key of ["model", "compute-type", "language", "agent"]) {
+    if (options[key] && options[key] !== true) args.push(`--${key}`, options[key]);
+  }
+  for (const key of ["skip-agent", "skip-media"]) {
+    if (options[key]) args.push(`--${key}`);
+  }
+  return args;
 }
 
 async function renderCommand(args) {
@@ -125,22 +203,154 @@ async function verifyCommand(args) {
 
 async function resumeCommand(args) {
   const { positional, options } = parseArgs(args);
-  const workspacePath = path.resolve(positional[0] ?? process.cwd());
+  const workspacePath = path.resolve(positional[0] ?? (await findLatestWorkspace(process.cwd())) ?? process.cwd());
   const state = await readState(workspacePath);
   const step = options.from ?? options.step ?? state.failed_step ?? state.current_step;
 
+  console.log(`작업 폴더: ${workspacePath}`);
+  console.log(`재개할 단계: ${step}`);
+
+  if (step === "extract_audio") {
+    await extractAudio(workspacePath);
+    await markCompleted(workspacePath, "extract_audio");
+    await transcribeAudio(workspacePath, {
+      model: options.model ?? "large-v3",
+      computeType: options["compute-type"] ?? "auto",
+      language: options.language ?? "ko"
+    });
+    await markCompleted(workspacePath, "transcribe");
+    await continueAfterTranscribe(workspacePath, options);
+    return;
+  }
+  if (step === "transcribe") {
+    await transcribeAudio(workspacePath, {
+      model: options.model ?? "large-v3",
+      computeType: options["compute-type"] ?? "auto",
+      language: options.language ?? "ko"
+    });
+    await markCompleted(workspacePath, "transcribe");
+    await continueAfterTranscribe(workspacePath, options);
+    return;
+  }
+  if (step === "agent_write_md" || step === "ready_for_agent") {
+    if (options["skip-agent"] || state.run_options?.skip_agent) {
+      await writeMeetingTemplate(workspacePath);
+      await writeState(workspacePath, {
+        ...(await readState(workspacePath)),
+        status: "ready",
+        current_step: "ready_for_agent",
+        failed_step: null
+      });
+      console.log("output/meeting.md 템플릿을 작성했습니다.");
+      return;
+    }
+    const selectedAgent = await runAgentToWriteMeeting({ agent: options.agent ?? "auto", workspacePath });
+    await markCompleted(workspacePath, "agent_write_md");
+    console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
+    await renderCommand([path.join(workspacePath, "output", "meeting.md")]);
+    await markCompleted(workspacePath, "render");
+    await verifyCommand([workspacePath]);
+    await markCompleted(workspacePath, "verify");
+    return;
+  }
   if (step === "verify") {
     await verifyCommand([workspacePath]);
+    await markCompleted(workspacePath, "verify");
     return;
   }
   if (step === "render" || step === "ready_for_render") {
     await renderCommand([path.join(workspacePath, "output", "meeting.md")]);
+    await markCompleted(workspacePath, "render");
     await verifyCommand([workspacePath]);
+    await markCompleted(workspacePath, "verify");
     return;
   }
 
-  console.log(`재개할 단계: ${step}`);
-  console.log("현재 1차 구현에서는 render/verify 단계 재개를 지원합니다.");
+  console.log("이 단계는 자동 재개 대상이 아닙니다. 새 작업을 시작하지 말고 위 작업 폴더의 state.json을 확인하세요.");
+}
+
+async function continueAfterTranscribe(workspacePath, options = {}) {
+  const state = await readState(workspacePath);
+  if (state.run_options?.skip_agent) {
+    await writeMeetingTemplate(workspacePath);
+    await writeState(workspacePath, {
+      ...(await readState(workspacePath)),
+      status: "ready",
+      current_step: "ready_for_agent",
+      failed_step: null
+    });
+    console.log("전사 재개 완료: output/meeting.md 템플릿을 작성했습니다.");
+    return;
+  }
+
+  const selectedAgent = await runAgentToWriteMeeting({ agent: options.agent ?? state.run_options?.agent ?? "auto", workspacePath });
+  await markCompleted(workspacePath, "agent_write_md");
+  console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
+  await renderCommand([path.join(workspacePath, "output", "meeting.md")]);
+  await markCompleted(workspacePath, "render");
+  await verifyCommand([workspacePath]);
+  await markCompleted(workspacePath, "verify");
+  await writeState(workspacePath, {
+    ...(await readState(workspacePath)),
+    status: "ready",
+    current_step: "complete",
+    failed_step: null
+  });
+}
+
+function defaultArtifacts(workspacePath) {
+  return {
+    workspace: workspacePath,
+    meeting_info: "config/meeting_info.json",
+    transcript: "work/transcript.txt",
+    meeting_md: "output/meeting.md",
+    meeting_docx: "output/meeting.docx",
+    meeting_pdf: "output/meeting.pdf",
+    verification_report: "output/verification_report.md"
+  };
+}
+
+async function markCompleted(workspacePath, step) {
+  const state = await readState(workspacePath);
+  const completed = new Set(state.completed_steps ?? []);
+  completed.add(step);
+  await writeState(workspacePath, {
+    ...state,
+    status: "running",
+    current_step: step,
+    completed_steps: [...completed],
+    failed_step: null,
+    artifacts: { ...defaultArtifacts(workspacePath), ...(state.artifacts ?? {}) }
+  });
+}
+
+async function markFailed(workspacePath, step, error) {
+  const state = await readState(workspacePath);
+  await writeState(workspacePath, {
+    ...state,
+    status: "failed",
+    current_step: step,
+    failed_step: step,
+    last_error: error?.message ?? String(error),
+    artifacts: { ...defaultArtifacts(workspacePath), ...(state.artifacts ?? {}) }
+  });
+}
+
+async function findLatestWorkspace(baseDir) {
+  const entries = await readdir(baseDir, { withFileTypes: true });
+  const candidates = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const workspacePath = path.join(baseDir, entry.name);
+    try {
+      const state = await readState(workspacePath);
+      candidates.push({ workspacePath, updatedAt: Date.parse(state.updated_at ?? 0) || 0 });
+    } catch {
+      // Not a meeting-harness workspace.
+    }
+  }
+  candidates.sort((a, b) => b.updatedAt - a.updatedAt);
+  return candidates[0]?.workspacePath ?? null;
 }
 
 async function collectMeetingInfo({ sourceDir, workspacePath, inputFiles = [], options = {} }) {
@@ -305,13 +515,13 @@ function printHelp() {
 
 사용법:
   meeting-harness setup
-  meeting-harness run <media-file...> [--base-dir DIR] [--skip-media] [--skip-agent]
+  meeting-harness run <media-file...> [--base-dir DIR] [--skip-media] [--skip-agent] [--new]
   meeting-harness render output/meeting.md
   meeting-harness verify [작업폴더] [--strict]
   meeting-harness resume [작업폴더]
 
 주요 명령:
-  meeting-harness run      작업 폴더를 만들고 전사/에이전트/렌더 준비를 시작합니다.
+  meeting-harness run      기존 실패 작업이 있으면 재사용하고, 없으면 새 작업을 시작합니다.
   meeting-harness render   meeting.md를 DOCX/PDF로 렌더링합니다.
   meeting-harness verify   생성 결과 검증 보고서를 만듭니다.
 `);

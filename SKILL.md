@@ -93,6 +93,8 @@ Use:
 meeting-harness run "<media-file>"
 ```
 
+If the same media file already has a failed or in-progress workspace, `run` will reuse that workspace instead of creating another timestamped folder. Use `--new` only when the user explicitly wants a fresh independent run.
+
 For lower-resource test runs only, model options may be used:
 
 ```bash

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { buildWorkspaceName } from "./core.js";
@@ -17,6 +17,7 @@ const workspaceDirs = [
 
 export async function createWorkspace({ inputFiles, baseDir = process.cwd(), now = new Date() }) {
   if (!inputFiles?.length) throw new Error("입력 파일이 필요합니다.");
+  const sourceFiles = normalizeInputFiles(inputFiles);
 
   const workspaceBase = await uniqueWorkspacePath(
     path.join(baseDir, buildWorkspaceName(path.basename(inputFiles[0]), now))
@@ -37,6 +38,7 @@ export async function createWorkspace({ inputFiles, baseDir = process.cwd(), now
     current_step: "create_workspace",
     completed_steps: ["create_workspace"],
     failed_step: null,
+    source_files: sourceFiles,
     artifacts: {
       workspace: workspaceBase
     },
@@ -48,6 +50,30 @@ export async function createWorkspace({ inputFiles, baseDir = process.cwd(), now
     path: workspaceBase,
     state
   };
+}
+
+export async function findReusableWorkspace({ inputFiles, baseDir = process.cwd() }) {
+  if (!inputFiles?.length) return null;
+  const expected = normalizeInputFiles(inputFiles);
+  const entries = await readdir(baseDir, { withFileTypes: true });
+  const candidates = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const workspacePath = path.join(baseDir, entry.name);
+    let state;
+    try {
+      state = await readState(workspacePath);
+    } catch {
+      continue;
+    }
+    if (!isSameInputSet(state.source_files, expected)) continue;
+    if (!isReusableState(state)) continue;
+    candidates.push({ workspacePath, updatedAt: Date.parse(state.updated_at ?? 0) || 0 });
+  }
+
+  candidates.sort((a, b) => b.updatedAt - a.updatedAt);
+  return candidates[0]?.workspacePath ?? null;
 }
 
 export async function uniqueWorkspacePath(basePath) {
@@ -84,4 +110,19 @@ async function exists(target) {
     if (error.code === "ENOENT") return false;
     return false;
   }
+}
+
+function normalizeInputFiles(inputFiles) {
+  return inputFiles.map((item) => path.resolve(item).normalize("NFC"));
+}
+
+function isSameInputSet(left, right) {
+  if (!Array.isArray(left) || left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+
+function isReusableState(state) {
+  if (state.status === "failed") return true;
+  if (state.status === "running") return true;
+  return state.current_step && !["complete", "ready"].includes(state.current_step);
 }
