@@ -1,0 +1,32 @@
+# Dependency directories
+node_modules/
+.venv/
+venv/
+env/
+
+# Python cache and test cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local run outputs
+.meeting-harness/
+meeting_harness_runs/
+self_test_runs/
+archive/
+output/
+input/
+work/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

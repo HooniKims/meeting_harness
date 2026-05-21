@@ -1,0 +1,6 @@
+interface:
+  display_name: "Meeting Harness"
+  short_description: "Turn recordings into verified meeting reports"
+  default_prompt: "Use $meeting-harness to turn the video or audio files in this folder into meeting minutes."
+policy:
+  allow_implicit_invocation: true
