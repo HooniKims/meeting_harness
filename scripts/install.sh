@@ -129,7 +129,7 @@ if ! has_command node; then
 fi
 
 if ! has_command npm; then
-  echo "npm을 찾을 수 없습니다. Node.js LTS 설치가 정상 완료되었는지 확인하세요."
+  echo "npx skills installer 실행에 필요한 npm을 찾을 수 없습니다. Node.js LTS 설치가 정상 완료되었는지 확인하세요."
   exit 1
 fi
 

@@ -115,7 +115,7 @@ if (-not (HasCommand "node")) {
 }
 
 if (-not (HasCommand "npm")) {
-  throw "npm을 찾을 수 없습니다. Node.js LTS 설치가 정상 완료되었는지 확인하세요."
+  throw "npx skills installer 실행에 필요한 npm을 찾을 수 없습니다. Node.js LTS 설치가 정상 완료되었는지 확인하세요."
 }
 
 Install-AppFromGitHub

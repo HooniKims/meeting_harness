@@ -25,10 +25,14 @@ meeting-harness --help
 3. If missing, tell the user to install the CLI first:
 
 ```bash
-npm install -g meeting-harness
+irm https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/install.ps1 | iex
 ```
 
-or use the project bootstrap installer if one is available.
+For macOS/Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/install.sh | bash
+```
 
 ## Trigger Mapping
 

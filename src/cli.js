@@ -104,7 +104,7 @@ async function setupCommand() {
   console.log(`Codex CLI: ${detectAgent({ preferred: "codex" }) ? "감지됨" : "없음"}`);
   console.log(`Claude CLI: ${detectAgent({ preferred: "claude" }) ? "감지됨" : "없음"}`);
   console.log(`기본 에이전트: ${detectAgent() ?? "없음"}`);
-  console.log("Python, ffmpeg, Whisper 패키지는 run 단계에서 추가 점검하도록 확장 예정입니다.");
+  console.log("Python, ffmpeg, Whisper/DOCX/PDF 패키지는 installer와 실행 단계에서 점검합니다.");
 }
 
 async function renderCommand(args) {
