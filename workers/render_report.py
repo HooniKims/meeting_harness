@@ -77,20 +77,19 @@ def render_docx(markdown: str, output_path: Path) -> None:
 
 
 def register_pdf_fonts(base_dir: Path) -> tuple[str, str]:
-    regular_name = "Helvetica"
-    bold_name = "Helvetica-Bold"
     regular = find_font_file(base_dir, "4Regular")
     bold = find_font_file(base_dir, "8ExtraBold") or find_font_file(base_dir, "6SemiBold")
+    if not regular or not bold:
+        raise RuntimeError(
+            "PDF 한글 폰트를 찾지 못했습니다. fonts/Paperlogy-4Regular.ttf와 "
+            "fonts/Paperlogy-8ExtraBold.ttf 또는 fonts/Paperlogy-6SemiBold.ttf가 필요합니다."
+        )
     try:
-        if regular:
-            pdfmetrics.registerFont(TTFont("PaperlogyRegular", str(regular)))
-            regular_name = "PaperlogyRegular"
-        if bold:
-            pdfmetrics.registerFont(TTFont("PaperlogyBold", str(bold)))
-            bold_name = "PaperlogyBold"
-    except Exception:
-        return "Helvetica", "Helvetica-Bold"
-    return regular_name, bold_name
+        pdfmetrics.registerFont(TTFont("PaperlogyRegular", str(regular)))
+        pdfmetrics.registerFont(TTFont("PaperlogyBold", str(bold)))
+    except Exception as exc:
+        raise RuntimeError(f"PDF 한글 폰트 등록 실패: {exc}") from exc
+    return "PaperlogyRegular", "PaperlogyBold"
 
 
 def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:

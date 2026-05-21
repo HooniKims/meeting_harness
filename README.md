@@ -10,6 +10,7 @@
 - 로컬 faster-whisper로 전사합니다.
 - Codex 또는 Claude가 회의 맥락을 정리할 수 있도록 작업 파일을 준비합니다.
 - `meeting.md`를 기준으로 A4 가로형 DOCX/PDF 회의록을 만듭니다.
+- Paperlogy 폰트를 PDF에 임베딩해 Windows/macOS에서도 한글이 깨지지 않도록 합니다.
 - 마지막에 결과물이 제대로 만들어졌는지 검증 보고서를 만듭니다.
 
 ## 설치 방법
@@ -49,6 +50,8 @@ Windows에서는 다음 위치를 사용합니다.
 ```text
 %USERPROFILE%\.meeting-harness\venv
 ```
+
+PDF 한글 출력을 위해 Paperlogy 폰트가 프로젝트에 함께 포함됩니다. 별도로 폰트를 설치하지 않아도 GitHub ZIP 설치 시 같이 내려받아 PDF에 임베딩합니다.
 
 설치 마지막에는 PC 사양을 확인해 전사 기본 설정을 저장합니다.
 

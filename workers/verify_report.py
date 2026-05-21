@@ -46,6 +46,21 @@ def extract_pdf_text(pdf_path: Path) -> tuple[int, str]:
         raise RuntimeError("PyMuPDF(fitz) 또는 pypdf가 필요합니다.") from exc
 
 
+def extract_pdf_fonts(pdf_path: Path) -> set[str]:
+    try:
+        import fitz
+    except ImportError:
+        return set()
+
+    fonts: set[str] = set()
+    with fitz.open(pdf_path) as doc:
+        for page in doc:
+            for font in page.get_fonts(full=True):
+                if len(font) >= 4 and font[3]:
+                    fonts.add(str(font[3]))
+    return fonts
+
+
 def check_required_files(workdir: Path, result: Verification) -> None:
     required = [
         "output/meeting.md",
@@ -116,6 +131,15 @@ def check_pdf(workdir: Path, result: Verification) -> None:
         result.pass_("PDF 텍스트 추출 확인")
     else:
         result.fail("PDF 텍스트 추출 결과가 비어 있습니다.")
+    if "■" in text or "□" in text:
+        result.fail("PDF에 글자 대체 박스(■/□)가 포함되어 있습니다. 한글 폰트 임베딩을 확인하세요.")
+    fonts = extract_pdf_fonts(path)
+    if fonts and any("Paperlogy" in font for font in fonts):
+        result.pass_("PDF Paperlogy 폰트 임베딩 확인")
+    elif fonts:
+        result.fail(f"PDF에 Paperlogy 폰트가 임베딩되지 않았습니다: {', '.join(sorted(fonts)[:8])}")
+    else:
+        result.review("PDF 폰트 목록을 확인하지 못했습니다. PyMuPDF 설치 상태를 확인하세요.")
 
 
 def write_report(workdir: Path, result: Verification) -> Path:
@@ -187,4 +211,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
