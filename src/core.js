@@ -12,6 +12,10 @@ export const requiredMeetingSections = [
 ];
 
 const fieldMap = new Map([
+  ["자료유형", "contentType"],
+  ["자료 유형", "contentType"],
+  ["유형", "contentType"],
+  ["형식", "contentType"],
   ["회의명", "title"],
   ["제목", "title"],
   ["일시", "dateTime"],
