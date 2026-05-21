@@ -55,7 +55,7 @@ Windows에서는 다음 위치를 사용합니다.
 - 시스템 메모리
 - CPU 코어 수
 - NVIDIA GPU 및 VRAM, 감지 가능한 경우
-- 품질 우선 Whisper 모델
+- 사양 기반 추천 Whisper 모델
 - 연산 설정
 
 설정 파일은 다음 위치에 저장됩니다.
@@ -69,6 +69,20 @@ Windows:
 ```text
 %USERPROFILE%\.meeting-harness\config.json
 ```
+
+기본 추천은 `auto`입니다. 고성능 NVIDIA GPU가 있으면 품질 쪽으로, GPU 없이 CPU로 전사하는 Mac mini M4나 일반 Windows PC에서는 균형 쪽으로 추천합니다.
+
+```bash
+meeting-harness setup --profile auto
+meeting-harness setup --profile balanced
+meeting-harness setup --profile quality
+meeting-harness setup --profile fast
+```
+
+- `auto`: 사양을 보고 자동 추천
+- `balanced`: 품질과 시간을 균형 있게 선택
+- `quality`: 시간이 오래 걸려도 품질 우선
+- `fast`: 긴 파일을 빠르게 처리하는 속도 우선
 
 설치 후 새 터미널을 열고 확인합니다.
 
@@ -88,6 +102,12 @@ CLI로 직접 실행할 수 있습니다.
 
 ```bash
 meeting-harness run meeting.mp4
+```
+
+특정 작업에만 균형 모드를 적용할 수도 있습니다.
+
+```bash
+meeting-harness run meeting.mp4 --profile balanced
 ```
 
 `run`은 먼저 실행 환경을 점검합니다. Python, ffmpeg, Whisper 관련 패키지가 준비되지 않았으면 작업 폴더를 만들기 전에 멈추고 installer 재실행을 안내합니다. 그래서 환경 문제만으로 빈 작업 폴더가 계속 쌓이지 않도록 설계되어 있습니다.

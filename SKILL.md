@@ -95,13 +95,19 @@ meeting-harness run "<media-file>"
 
 If the same media file already has a failed or in-progress workspace, `run` will reuse that workspace instead of creating another timestamped folder. Use `--new` only when the user explicitly wants a fresh independent run.
 
+For long recordings or CPU-only machines, use a balanced profile:
+
+```bash
+meeting-harness run "<media-file>" --profile balanced
+```
+
 For lower-resource test runs only, model options may be used:
 
 ```bash
 meeting-harness run "<media-file>" --model tiny --compute-type int8
 ```
 
-For normal use, prefer quality-first defaults.
+For normal use, prefer the CLI's `auto` profile. It recommends settings from the local hardware profile.
 
 ## Expected Outputs
 

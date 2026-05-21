@@ -6,7 +6,7 @@ import { stdin as input, stdout as output } from "node:process";
 
 import { detectAgent, runAgentToWriteMeeting } from "./agent.js";
 import { writeAgentInstructions, writeResultReadme } from "./artifacts.js";
-import { detectHardwareProfile, getConfigPath, readHarnessConfig, recommendTranscriptionSettings, writeHarnessConfig } from "./config.js";
+import { detectHardwareProfile, getConfigPath, normalizeTranscriptionProfile, readHarnessConfig, recommendTranscriptionSettings, writeHarnessConfig } from "./config.js";
 import { parseMeetingInfoText } from "./core.js";
 import { createWorkspace, findReusableWorkspace, readState, writeState } from "./workspace.js";
 import { extractAudio, resolvePythonCommand, runPythonWorker, transcribeAudio } from "./processes.js";
@@ -28,7 +28,7 @@ export async function main(argv) {
   }
 
   if (command === "run") return runCommand(rest);
-  if (command === "setup") return setupCommand();
+  if (command === "setup") return setupCommand(rest);
   if (command === "render") return renderCommand(rest);
   if (command === "verify") return verifyCommand(rest);
   if (command === "resume") return resumeCommand(rest);
@@ -43,7 +43,7 @@ async function runCommand(args) {
 
   const baseDir = options["base-dir"] ? path.resolve(options["base-dir"]) : process.cwd();
   const inputFiles = positional.map((item) => path.resolve(item));
-  const transcriptionDefaults = await getTranscriptionDefaults();
+  const transcriptionDefaults = await getTranscriptionDefaults(options.profile);
 
   if (!options.new && !options["force-new"]) {
     const reusableWorkspace = await findReusableWorkspace({ inputFiles, baseDir });
@@ -67,6 +67,7 @@ async function runCommand(args) {
         skip_agent: Boolean(options["skip-agent"]),
         skip_media: Boolean(options["skip-media"]),
         agent: options.agent ?? "auto",
+        profile: options.profile ?? transcriptionDefaults.profile,
         model: options.model ?? transcriptionDefaults.model,
         compute_type: options["compute-type"] ?? transcriptionDefaults.computeType,
         language: options.language ?? transcriptionDefaults.language
@@ -138,14 +139,16 @@ async function runCommand(args) {
   return workspace.path;
 }
 
-async function setupCommand() {
+async function setupCommand(args = []) {
+  const { options } = parseArgs(args);
+  const selectedProfile = normalizeTranscriptionProfile(options.profile ?? "auto");
   console.log("meeting-harness setup");
   console.log(`Node.js: ${process.version}`);
   console.log(`Codex CLI: ${detectAgent({ preferred: "codex" }) ? "감지됨" : "없음"}`);
   console.log(`Claude CLI: ${detectAgent({ preferred: "claude" }) ? "감지됨" : "없음"}`);
   console.log(`기본 에이전트: ${detectAgent() ?? "없음"}`);
   const profile = detectHardwareProfile();
-  const recommendation = recommendTranscriptionSettings(profile);
+  const recommendation = recommendTranscriptionSettings(profile, { profile: selectedProfile });
   const config = {
     transcription: recommendation,
     hardware: profile,
@@ -155,6 +158,7 @@ async function setupCommand() {
   console.log(`시스템 메모리: ${profile.totalMemoryGb}GB`);
   console.log(`CPU 코어: ${profile.cpuCount}`);
   console.log(`GPU: ${profile.gpu ? `${profile.gpu.name} (${profile.gpu.memoryGb}GB)` : "NVIDIA GPU 감지 안 됨"}`);
+  console.log(`전사 프로필: ${recommendation.profile}`);
   console.log(`전사 모델 추천: ${recommendation.model}`);
   console.log(`연산 설정 추천: ${recommendation.computeType}`);
   console.log(`언어 기본값: ${recommendation.language}`);
@@ -162,13 +166,17 @@ async function setupCommand() {
   console.log("Python, ffmpeg, Whisper/DOCX/PDF 패키지는 installer와 실행 단계에서 점검합니다.");
 }
 
-async function getTranscriptionDefaults() {
+async function getTranscriptionDefaults(requestedProfile) {
+  if (requestedProfile) {
+    return recommendTranscriptionSettings(detectHardwareProfile(), { profile: requestedProfile });
+  }
   const config = await readHarnessConfig();
   if (config.transcription?.model && config.transcription?.computeType) {
     return {
       model: config.transcription.model,
       computeType: config.transcription.computeType,
-      language: config.transcription.language ?? "ko"
+      language: config.transcription.language ?? "ko",
+      profile: config.transcription.profile ?? config.transcription.policy ?? "auto"
     };
   }
   return recommendTranscriptionSettings();
@@ -210,7 +218,7 @@ function commandWorks(command, args) {
 
 function forwardResumeOptions(options = {}) {
   const args = [];
-  for (const key of ["model", "compute-type", "language", "agent"]) {
+  for (const key of ["model", "compute-type", "language", "agent", "profile"]) {
     if (options[key] && options[key] !== true) args.push(`--${key}`, options[key]);
   }
   for (const key of ["skip-agent", "skip-media"]) {
@@ -243,7 +251,7 @@ async function resumeCommand(args) {
   console.log(`재개할 단계: ${step}`);
 
   if (step === "extract_audio") {
-    const transcriptionDefaults = await getTranscriptionDefaults();
+    const transcriptionDefaults = await getTranscriptionDefaults(options.profile ?? state.run_options?.profile);
     await extractAudio(workspacePath);
     await markCompleted(workspacePath, "extract_audio");
     await transcribeAudio(workspacePath, {
@@ -256,7 +264,7 @@ async function resumeCommand(args) {
     return;
   }
   if (step === "transcribe") {
-    const transcriptionDefaults = await getTranscriptionDefaults();
+    const transcriptionDefaults = await getTranscriptionDefaults(options.profile ?? state.run_options?.profile);
     await transcribeAudio(workspacePath, {
       model: options.model ?? state.run_options?.model ?? transcriptionDefaults.model,
       computeType: options["compute-type"] ?? state.run_options?.compute_type ?? transcriptionDefaults.computeType,
@@ -548,8 +556,8 @@ function printHelp() {
   console.log(`meeting-harness
 
 사용법:
-  meeting-harness setup
-  meeting-harness run <media-file...> [--base-dir DIR] [--skip-media] [--skip-agent] [--new]
+  meeting-harness setup [--profile auto|quality|balanced|fast]
+  meeting-harness run <media-file...> [--profile auto|quality|balanced|fast] [--base-dir DIR] [--skip-media] [--skip-agent] [--new]
   meeting-harness render output/meeting.md
   meeting-harness verify [작업폴더] [--strict]
   meeting-harness resume [작업폴더]
