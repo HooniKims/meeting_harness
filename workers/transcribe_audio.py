@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 
@@ -17,6 +18,9 @@ def transcribe(audio_path: Path, output_txt: Path, output_json: Path, model_name
     if not audio_path.exists():
         raise SystemExit(f"오디오 파일을 찾을 수 없습니다: {audio_path}")
 
+    started_at = time.monotonic()
+    print(f"전사 준비: model={model_name}, compute={compute_type}, language={language}", flush=True)
+    print("Whisper 모델을 불러오는 중입니다. 첫 실행은 모델 다운로드/로딩 때문에 시간이 걸릴 수 있습니다.", flush=True)
     model = WhisperModel(model_name, device="auto", compute_type=compute_type)
     segments, info = model.transcribe(
         str(audio_path),
@@ -24,6 +28,12 @@ def transcribe(audio_path: Path, output_txt: Path, output_json: Path, model_name
         vad_filter=True,
         beam_size=5,
     )
+
+    duration = float(info.duration or 0)
+    if duration > 0:
+        print(f"전사 시작: 전체 오디오 길이 {format_time(duration)}", flush=True)
+    else:
+        print("전사 시작: 전체 오디오 길이를 확인하지 못했습니다.", flush=True)
 
     rows = []
     text_lines = []
@@ -37,6 +47,7 @@ def transcribe(audio_path: Path, output_txt: Path, output_json: Path, model_name
         rows.append(row)
         if row["text"]:
             text_lines.append(f"[{format_time(row['start'])}-{format_time(row['end'])}] {row['text']}")
+        print_transcribe_progress(index, row["end"], duration, started_at)
 
     if not text_lines:
         text_lines.append("[00:00:00-00:00:00] 감지된 발화가 없습니다. Whisper 전사는 정상 실행되었으나 음성 내용이 비어 있거나 발화로 인식되지 않았습니다.")
@@ -60,6 +71,25 @@ def transcribe(audio_path: Path, output_txt: Path, output_json: Path, model_name
         + "\n",
         encoding="utf-8",
     )
+    print(f"전사 완료: {len(rows)}개 구간, 경과 {format_elapsed(time.monotonic() - started_at)}", flush=True)
+
+
+def print_transcribe_progress(index: int, current_seconds: float, duration: float, started_at: float) -> None:
+    elapsed_seconds = time.monotonic() - started_at
+    elapsed = format_elapsed(elapsed_seconds)
+    current = format_time(current_seconds)
+    if duration > 0:
+        percent = min(100.0, max(0.0, (current_seconds / duration) * 100))
+        total = format_time(duration)
+        remaining_audio = format_time(max(0.0, duration - current_seconds))
+        eta = estimate_remaining(elapsed_seconds, current_seconds, duration)
+        print(
+            f"전사 진행: {percent:5.1f}% | 현재 {current} / 전체 {total} | "
+            f"남은 음성 {remaining_audio} | 예상 남은 시간 {eta} | 구간 {index}개",
+            flush=True,
+        )
+    else:
+        print(f"전사 진행: {current}까지 처리 | 구간 {index}개 | 경과 {elapsed}", flush=True)
 
 
 def format_time(seconds: float) -> str:
@@ -67,6 +97,25 @@ def format_time(seconds: float) -> str:
     hour, remainder = divmod(total, 3600)
     minute, second = divmod(remainder, 60)
     return f"{hour:02d}:{minute:02d}:{second:02d}"
+
+
+def format_elapsed(seconds: float) -> str:
+    total = int(seconds)
+    minute, second = divmod(total, 60)
+    hour, minute = divmod(minute, 60)
+    if hour:
+        return f"{hour}시간 {minute}분 {second}초"
+    if minute:
+        return f"{minute}분 {second}초"
+    return f"{second}초"
+
+
+def estimate_remaining(elapsed_seconds: float, current_seconds: float, duration: float) -> str:
+    if current_seconds <= 0 or duration <= current_seconds:
+        return "계산 중"
+    estimated_total = elapsed_seconds * (duration / current_seconds)
+    remaining = max(0.0, estimated_total - elapsed_seconds)
+    return format_elapsed(remaining)
 
 
 def main() -> int:
