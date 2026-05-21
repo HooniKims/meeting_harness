@@ -36,7 +36,9 @@ def parse_markdown(markdown: str) -> tuple[str, list[MarkdownBlock]]:
     blocks: list[MarkdownBlock] = []
     current: MarkdownBlock | None = None
 
-    for raw_line in markdown.splitlines():
+    for index, raw_line in enumerate(markdown.splitlines()):
+        if index == 0:
+            raw_line = raw_line.lstrip("\ufeff")
         match = HEADING_RE.match(raw_line)
         if match:
             level = len(match.group(1))

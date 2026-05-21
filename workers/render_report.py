@@ -126,6 +126,13 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
         textColor=colors.HexColor("#24313F"),
         spaceAfter=3,
     )
+    bullet_style = ParagraphStyle(
+        "MeetingBullet",
+        parent=body_style,
+        leftIndent=7 * mm,
+        firstLineIndent=-4 * mm,
+        bulletIndent=1.5 * mm,
+    )
 
     doc = SimpleDocTemplate(
         str(output_path),
@@ -133,9 +140,21 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
         rightMargin=16 * mm,
         leftMargin=16 * mm,
         topMargin=13 * mm,
-        bottomMargin=13 * mm,
+        bottomMargin=17 * mm,
         title=title,
     )
+
+    def draw_footer(canvas, document) -> None:
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#D4E2EA"))
+        canvas.setLineWidth(0.4)
+        canvas.line(document.leftMargin, 11 * mm, landscape(A4)[0] - document.rightMargin, 11 * mm)
+        canvas.setFont(regular_font, 7.5)
+        canvas.setFillColor(colors.HexColor("#5B6B73"))
+        canvas.drawString(document.leftMargin, 7 * mm, "meeting-harness")
+        canvas.drawRightString(landscape(A4)[0] - document.rightMargin, 7 * mm, str(canvas.getPageNumber()))
+        canvas.restoreState()
+
     story = [Paragraph(html.escape(title), title_style), Spacer(1, 5 * mm)]
     for index, block in enumerate(blocks):
         if index and index % 4 == 0:
@@ -146,9 +165,10 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
             if not stripped:
                 continue
             if stripped.startswith(("- ", "* ")):
-                stripped = f"• {stripped[2:].strip()}"
+                story.append(Paragraph(html.escape(stripped[2:].strip()), bullet_style, bulletText="-"))
+                continue
             story.append(Paragraph(html.escape(stripped), body_style))
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
 
 
 def main() -> int:
@@ -174,4 +194,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
