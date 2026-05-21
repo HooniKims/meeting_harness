@@ -69,7 +69,7 @@ function resolvePythonCommand() {
 
 export function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit", shell: process.platform === "win32", ...options });
+    const child = spawn(command, args, { stdio: "inherit", shell: false, ...options });
     child.on("error", reject);
     child.on("exit", (code) => {
       if (code === 0) resolve();

@@ -76,6 +76,8 @@ meeting-harness run meeting.mp4
 meeting-harness run part1.mp4 part2.mp4 part3.mp4
 ```
 
+폴더명이나 파일명에 공백, 한글, 괄호가 있어도 사용할 수 있어야 합니다. 예를 들어 Windows의 `video to audio` 같은 폴더에서도 동작하도록 설계되어 있습니다.
+
 Codex나 Claude에서 skill처럼 사용할 수도 있습니다.
 
 ```text
