@@ -13,6 +13,8 @@ YES="${YES:-0}"
 INSTALL_ROOT="${HOME}/.meeting-harness"
 APP_DIR="${INSTALL_ROOT}/app"
 BIN_DIR="${INSTALL_ROOT}/bin"
+VENV_DIR="${INSTALL_ROOT}/venv"
+VENV_PYTHON="${VENV_DIR}/bin/python"
 LAUNCHER="${BIN_DIR}/meeting-harness"
 
 step() {
@@ -32,15 +34,28 @@ confirm() {
   [ -z "$answer" ] || [ "$answer" = "y" ] || [ "$answer" = "Y" ] || [ "$answer" = "yes" ] || [ "$answer" = "YES" ]
 }
 
-has_python_package() {
-  python3 -m pip show "$1" >/dev/null 2>&1 || python -m pip show "$1" >/dev/null 2>&1
-}
-
 run_python() {
   if has_command python3; then
     python3 "$@"
   else
     python "$@"
+  fi
+}
+
+has_venv_python_package() {
+  "$VENV_PYTHON" -m pip show "$1" >/dev/null 2>&1
+}
+
+ensure_venv() {
+  if [ "$FORCE" = "1" ] && [ -d "$VENV_DIR" ]; then
+    rm -rf "$VENV_DIR"
+  fi
+
+  if [ ! -x "$VENV_PYTHON" ]; then
+    step "하네스 전용 Python 가상환경을 만듭니다."
+    run_python -m venv "$VENV_DIR"
+  else
+    step "하네스 전용 Python 가상환경이 이미 있습니다. 건너뜁니다."
   fi
 }
 
@@ -97,6 +112,7 @@ install_app_from_github() {
   mkdir -p "$BIN_DIR"
   cat > "$LAUNCHER" <<EOF
 #!/usr/bin/env bash
+export MEETING_HARNESS_PYTHON="${VENV_PYTHON}"
 node "${APP_DIR}/bin/meeting-harness.js" "\$@"
 EOF
   chmod +x "$LAUNCHER"
@@ -166,18 +182,20 @@ if [ "$SKIP_PYTHON_DEPS" != "1" ]; then
     fi
   fi
 
+  ensure_venv
+
   missing=()
   for package in faster-whisper python-docx reportlab pymupdf pypdf; do
-    if ! has_python_package "$package"; then
+    if ! has_venv_python_package "$package"; then
       missing+=("$package")
     fi
   done
   if [ "${#missing[@]}" -gt 0 ]; then
-    step "Python 패키지를 설치합니다: ${missing[*]}"
-    run_python -m pip install --upgrade pip
-    run_python -m pip install "${missing[@]}"
+    step "하네스 전용 가상환경에 Python 패키지를 설치합니다: ${missing[*]}"
+    "$VENV_PYTHON" -m pip install --upgrade pip
+    "$VENV_PYTHON" -m pip install "${missing[@]}"
   else
-    step "필수 Python 패키지가 이미 설치되어 있습니다. 건너뜁니다."
+    step "하네스 전용 가상환경에 필수 Python 패키지가 이미 설치되어 있습니다. 건너뜁니다."
   fi
 fi
 

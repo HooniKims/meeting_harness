@@ -38,6 +38,18 @@ curl -fsSL https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scri
 
 이 프로젝트는 npm 패키지로 공개 배포하지 않습니다. npm은 `npx skills@latest`를 실행하기 위한 도구로만 사용합니다. 실제 CLI 설치는 GitHub ZIP installer가 처리합니다.
 
+Python 패키지는 전역 Python에 설치하지 않습니다. installer는 하네스 전용 가상환경을 만들고 그 안에만 필요한 패키지를 설치합니다.
+
+```text
+~/.meeting-harness/venv
+```
+
+Windows에서는 다음 위치를 사용합니다.
+
+```text
+%USERPROFILE%\.meeting-harness\venv
+```
+
 설치 후 새 터미널을 열고 확인합니다.
 
 ```bash

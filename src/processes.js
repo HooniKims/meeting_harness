@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,7 +38,8 @@ export async function transcribeAudio(workspacePath, { model = "large-v3", compu
 
 export async function runPythonWorker(scriptName, args) {
   const script = path.resolve(moduleDir, "..", "workers", scriptName);
-  await run("python", [script, ...args], {
+  const python = resolvePythonCommand();
+  await run(python.command, [...python.prefixArgs, script, ...args], {
     cwd: process.cwd(),
     env: {
       ...process.env,
@@ -45,6 +47,24 @@ export async function runPythonWorker(scriptName, args) {
       PYTHONIOENCODING: "utf-8"
     }
   });
+}
+
+function resolvePythonCommand() {
+  if (process.env.MEETING_HARNESS_PYTHON && existsSync(process.env.MEETING_HARNESS_PYTHON)) {
+    return { command: process.env.MEETING_HARNESS_PYTHON, prefixArgs: [] };
+  }
+
+  const installRoot = path.resolve(moduleDir, "..", "..");
+  const venvPython =
+    process.platform === "win32"
+      ? path.join(installRoot, "venv", "Scripts", "python.exe")
+      : path.join(installRoot, "venv", "bin", "python");
+
+  if (existsSync(venvPython)) {
+    return { command: venvPython, prefixArgs: [] };
+  }
+
+  return { command: process.platform === "win32" ? "python" : "python3", prefixArgs: [] };
 }
 
 export function run(command, args, options = {}) {

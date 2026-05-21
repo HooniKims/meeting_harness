@@ -18,6 +18,8 @@ if (-not $SkillSource) {
 $InstallRoot = Join-Path $env:USERPROFILE ".meeting-harness"
 $AppDir = Join-Path $InstallRoot "app"
 $BinDir = Join-Path $InstallRoot "bin"
+$VenvDir = Join-Path $InstallRoot "venv"
+$VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 $CmdPath = Join-Path $BinDir "meeting-harness.cmd"
 
 function Step($Message) {
@@ -35,11 +37,6 @@ function Confirm-Step($Message) {
   return $answer -eq "" -or $answer -match "^(y|Y|yes|YES)$"
 }
 
-function HasPythonPackage($Name) {
-  python -m pip show $Name *> $null
-  return $LASTEXITCODE -eq 0
-}
-
 function SkillInstalled($Name) {
   try {
     $json = npx -y skills@latest ls -g --json 2>$null
@@ -48,6 +45,38 @@ function SkillInstalled($Name) {
     return $null -ne ($items | Where-Object { $_.name -eq $Name })
   } catch {
     return $false
+  }
+}
+
+function Invoke-BasePython([string[]]$Arguments) {
+  if (HasCommand "python") {
+    & python @Arguments
+    return $LASTEXITCODE
+  }
+  if (HasCommand "py") {
+    & py -3 @Arguments
+    return $LASTEXITCODE
+  }
+  throw "Python 실행 파일을 찾을 수 없습니다."
+}
+
+function HasVenvPythonPackage($Name) {
+  & $VenvPython -m pip show $Name *> $null
+  return $LASTEXITCODE -eq 0
+}
+
+function Ensure-Venv() {
+  if ($Force -and (Test-Path $VenvDir)) {
+    Remove-Item -LiteralPath $VenvDir -Recurse -Force
+  }
+  if (-not (Test-Path $VenvPython)) {
+    Step "하네스 전용 Python 가상환경을 만듭니다."
+    $exitCode = Invoke-BasePython -Arguments @("-m", "venv", $VenvDir)
+    if ($exitCode -ne 0) {
+      throw "Python 가상환경 생성에 실패했습니다."
+    }
+  } else {
+    Step "하네스 전용 Python 가상환경이 이미 있습니다. 건너뜁니다."
   }
 }
 
@@ -93,7 +122,7 @@ function Install-AppFromGitHub() {
 
   New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
   $entry = Join-Path $AppDir "bin\meeting-harness.js"
-  $cmd = "@echo off`r`nnode `"$entry`" %*`r`n"
+  $cmd = "@echo off`r`nset `"MEETING_HARNESS_PYTHON=$VenvPython`"`r`nnode `"$entry`" %*`r`n"
   Set-Content -LiteralPath $CmdPath -Value $cmd -Encoding ASCII
   Ensure-Path $BinDir
 
@@ -121,7 +150,7 @@ if (-not (HasCommand "npm")) {
 Install-AppFromGitHub
 
 if (-not $SkipPythonDeps) {
-  if (-not (HasCommand "python")) {
+  if ((-not (HasCommand "python")) -and (-not (HasCommand "py"))) {
     Step "Python이 필요합니다."
     if (-not (HasCommand "winget")) {
       throw "Python이 없고 winget도 찾을 수 없습니다. https://python.org 에서 Python을 설치한 뒤 다시 실행하세요."
@@ -145,17 +174,19 @@ if (-not $SkipPythonDeps) {
     }
   }
 
+  Ensure-Venv
+
   $packages = @("faster-whisper", "python-docx", "reportlab", "pymupdf", "pypdf")
   $missing = @()
   foreach ($package in $packages) {
-    if (-not (HasPythonPackage $package)) { $missing += $package }
+    if (-not (HasVenvPythonPackage $package)) { $missing += $package }
   }
   if ($missing.Count -gt 0) {
-    Step "Python 패키지를 설치합니다: $($missing -join ', ')"
-    python -m pip install --upgrade pip
-    python -m pip install $missing
+    Step "하네스 전용 가상환경에 Python 패키지를 설치합니다: $($missing -join ', ')"
+    & $VenvPython -m pip install --upgrade pip
+    & $VenvPython -m pip install $missing
   } else {
-    Step "필수 Python 패키지가 이미 설치되어 있습니다. 건너뜁니다."
+    Step "하네스 전용 가상환경에 필수 Python 패키지가 이미 설치되어 있습니다. 건너뜁니다."
   }
 }
 
