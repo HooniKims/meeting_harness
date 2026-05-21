@@ -11,7 +11,7 @@ from docx.enum.section import WD_ORIENT
 from docx.shared import Cm, Pt
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -53,8 +53,9 @@ def render_docx(markdown: str, output_path: Path) -> None:
     title, blocks = parse_markdown(markdown)
     document = Document()
     section = document.sections[0]
-    section.orientation = WD_ORIENT.LANDSCAPE
-    section.page_width, section.page_height = section.page_height, section.page_width
+    section.orientation = WD_ORIENT.PORTRAIT
+    section.page_width = Cm(21.0)
+    section.page_height = Cm(29.7)
     section.top_margin = Cm(1.4)
     section.bottom_margin = Cm(1.4)
     section.left_margin = Cm(1.7)
@@ -135,7 +136,7 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
 
     doc = SimpleDocTemplate(
         str(output_path),
-        pagesize=landscape(A4),
+        pagesize=A4,
         rightMargin=16 * mm,
         leftMargin=16 * mm,
         topMargin=13 * mm,
@@ -147,11 +148,11 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
         canvas.saveState()
         canvas.setStrokeColor(colors.HexColor("#D4E2EA"))
         canvas.setLineWidth(0.4)
-        canvas.line(document.leftMargin, 11 * mm, landscape(A4)[0] - document.rightMargin, 11 * mm)
+        canvas.line(document.leftMargin, 11 * mm, A4[0] - document.rightMargin, 11 * mm)
         canvas.setFont(regular_font, 7.5)
         canvas.setFillColor(colors.HexColor("#5B6B73"))
         canvas.drawString(document.leftMargin, 7 * mm, "meeting-harness")
-        canvas.drawRightString(landscape(A4)[0] - document.rightMargin, 7 * mm, str(canvas.getPageNumber()))
+        canvas.drawRightString(A4[0] - document.rightMargin, 7 * mm, str(canvas.getPageNumber()))
         canvas.restoreState()
 
     story = [Paragraph(html.escape(title), title_style), Spacer(1, 5 * mm)]

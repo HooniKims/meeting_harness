@@ -9,7 +9,7 @@
 - 영상 파일이면 ffmpeg로 음성을 추출합니다.
 - 로컬 faster-whisper로 전사합니다.
 - Codex 또는 Claude가 회의 맥락을 정리할 수 있도록 작업 파일을 준비합니다.
-- `meeting.md`를 기준으로 A4 가로형 DOCX/PDF 회의록을 만듭니다.
+- `meeting.md`를 기준으로 A4 세로형 DOCX/PDF 회의록을 만듭니다.
 - Paperlogy 폰트를 PDF에 임베딩해 Windows/macOS에서도 한글이 깨지지 않도록 합니다.
 - 마지막에 결과물이 제대로 만들어졌는지 검증 보고서를 만듭니다.
 
