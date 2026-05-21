@@ -76,11 +76,11 @@ ensure_path_line() {
 
 install_app_from_github() {
   if [ -x "$LAUNCHER" ] && [ -d "$APP_DIR" ] && [ "$FORCE" != "1" ]; then
-    step "meeting-harness 앱이 이미 설치되어 있습니다. 건너뜁니다."
-    return
+    step "meeting-harness 앱이 이미 설치되어 있습니다. 최신 버전으로 갱신합니다."
+  else
+    step "GitHub에서 meeting-harness를 다운로드합니다."
   fi
 
-  step "GitHub에서 meeting-harness를 다운로드합니다."
   temp_root="$(mktemp -d)"
   zip_path="${temp_root}/source.zip"
   extract_dir="${temp_root}/source"
@@ -201,11 +201,11 @@ fi
 
 if [ "$SKIP_SKILL" != "1" ]; then
   if skill_installed && [ "$FORCE" != "1" ]; then
-    step "meeting-harness skill이 이미 설치되어 있습니다. 건너뜁니다."
+    step "meeting-harness skill이 이미 설치되어 있습니다. 최신 버전으로 갱신합니다."
   else
     step "meeting-harness skill을 설치합니다."
-    npx -y skills@latest add "$SKILL_SOURCE" -g --skill meeting-harness --agent '*' -y
   fi
+  npx -y skills@latest add "$SKILL_SOURCE" -g --skill meeting-harness --agent '*' -y
 fi
 
 if [ "$SKIP_SETUP" != "1" ]; then

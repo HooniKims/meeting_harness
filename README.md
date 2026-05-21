@@ -50,6 +50,26 @@ Windows에서는 다음 위치를 사용합니다.
 %USERPROFILE%\.meeting-harness\venv
 ```
 
+설치 마지막에는 PC 사양을 확인해 전사 기본 설정을 저장합니다.
+
+- 시스템 메모리
+- CPU 코어 수
+- NVIDIA GPU 및 VRAM, 감지 가능한 경우
+- 품질 우선 Whisper 모델
+- 연산 설정
+
+설정 파일은 다음 위치에 저장됩니다.
+
+```text
+~/.meeting-harness/config.json
+```
+
+Windows:
+
+```text
+%USERPROFILE%\.meeting-harness\config.json
+```
+
 설치 후 새 터미널을 열고 확인합니다.
 
 ```bash
@@ -207,6 +227,8 @@ macOS/Linux:
 curl -fsSL https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/install.sh | bash
 ```
 
+설치 명령을 다시 실행하면 기존 설치를 건너뛰지 않고 GitHub의 최신 코드로 갱신합니다. skill도 함께 최신 상태로 갱신합니다.
+
 강제로 다시 설치하려면 다음 옵션을 사용할 수 있습니다.
 
 Windows:
@@ -219,6 +241,34 @@ macOS/Linux:
 
 ```bash
 FORCE=1 ./scripts/install.sh
+```
+
+## 설치된 하네스 삭제하기
+
+더 이상 사용하지 않을 때는 uninstall 스크립트를 실행합니다. 여기서 삭제는 작업 폴더 정리가 아니라, 사용자 PC에 설치된 meeting-harness 자체를 제거한다는 뜻입니다. 이 명령은 설치된 CLI, 하네스 전용 Python 가상환경, PATH 등록, skill 등록을 정리합니다. 이미 만들어진 회의 작업 폴더와 원본 미디어 파일은 삭제하지 않습니다.
+
+Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/uninstall.ps1 | iex
+```
+
+묻지 않고 바로 삭제하려면:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/uninstall.ps1))) -Yes
+```
+
+macOS/Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/uninstall.sh | bash
+```
+
+묻지 않고 바로 삭제하려면:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scripts/uninstall.sh | YES=1 bash
 ```
 
 ## 주의할 점

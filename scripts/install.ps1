@@ -61,8 +61,16 @@ function Invoke-BasePython([string[]]$Arguments) {
 }
 
 function HasVenvPythonPackage($Name) {
-  & $VenvPython -m pip show $Name *> $null
-  return $LASTEXITCODE -eq 0
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $VenvPython
+  $safeName = $Name.Replace('"', '\"')
+  $startInfo.Arguments = "-m pip show `"$safeName`""
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $process = [System.Diagnostics.Process]::Start($startInfo)
+  $process.WaitForExit()
+  return $process.ExitCode -eq 0
 }
 
 function Ensure-Venv() {
@@ -95,11 +103,10 @@ function Ensure-Path($PathToAdd) {
 
 function Install-AppFromGitHub() {
   if ((Test-Path $CmdPath) -and (Test-Path $AppDir) -and -not $Force) {
-    Step "meeting-harness 앱이 이미 설치되어 있습니다. 건너뜁니다."
-    return
+    Step "meeting-harness 앱이 이미 설치되어 있습니다. 최신 버전으로 갱신합니다."
+  } else {
+    Step "GitHub에서 meeting-harness를 다운로드합니다."
   }
-
-  Step "GitHub에서 meeting-harness를 다운로드합니다."
   $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("meeting-harness-" + [System.Guid]::NewGuid().ToString("N"))
   $zipPath = Join-Path $tempRoot "source.zip"
   $extractDir = Join-Path $tempRoot "source"
@@ -192,11 +199,11 @@ if (-not $SkipPythonDeps) {
 
 if (-not $SkipSkill) {
   if ((SkillInstalled "meeting-harness") -and -not $Force) {
-    Step "meeting-harness skill이 이미 설치되어 있습니다. 건너뜁니다."
+    Step "meeting-harness skill이 이미 설치되어 있습니다. 최신 버전으로 갱신합니다."
   } else {
     Step "meeting-harness skill을 설치합니다."
-    npx -y skills@latest add $SkillSource -g --skill meeting-harness --agent '*' -y
   }
+  npx -y skills@latest add $SkillSource -g --skill meeting-harness --agent '*' -y
 }
 
 if (-not $SkipSetup) {
