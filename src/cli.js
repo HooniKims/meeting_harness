@@ -157,15 +157,25 @@ async function collectMeetingInfo({ sourceDir, workspacePath, inputFiles = [], o
   const parsed = parseMeetingInfoText(combined);
   const inferred = inferMeetingInfo({ sourceDir, workspacePath, inputFiles });
   const shouldAsk = process.stdin.isTTY && !options.yes && !options["no-prompt"];
+  const shouldConfirmOnly =
+    shouldAsk && !options.prompt && !foundInfoFile && inferred.confidence === "high" && inferred.contentType === "1인 강의/연수";
   const prompted =
-    shouldAsk && (!foundInfoFile || !parsed.contentType || !parsed.attendees?.length)
+    shouldAsk && !shouldConfirmOnly && (!foundInfoFile || !parsed.contentType || !parsed.attendees?.length)
       ? await promptForMeetingInfo({ parsed, inferred, foundInfoFile })
       : {};
 
+  if (shouldConfirmOnly) {
+    printInferredLectureConfirmation(inferred);
+  }
+
   if (!shouldAsk && (!foundInfoFile || !parsed.contentType || !parsed.attendees?.length)) {
-    console.log("[회의 정보] 정보 파일 또는 발화자 정보가 부족하여 추천 기본값으로 진행합니다.");
-    console.log(`[회의 정보] 자료 유형: ${parsed.contentType ?? inferred.contentType}`);
-    console.log(`[회의 정보] 발화자/참석자: ${(parsed.attendees ?? inferred.attendees).join(", ") || "미상"}`);
+    if (!foundInfoFile && inferred.confidence === "high" && inferred.contentType === "1인 강의/연수") {
+      printInferredLectureConfirmation(inferred);
+    } else {
+      console.log("[회의 정보] 정보 파일 또는 발화자 정보가 부족하여 추천 기본값으로 진행합니다.");
+      console.log(`[회의 정보] 자료 유형: ${parsed.contentType ?? inferred.contentType}`);
+      console.log(`[회의 정보] 발화자/참석자: ${(parsed.attendees ?? inferred.attendees).join(", ") || "미상"}`);
+    }
   }
 
   const info = {
@@ -184,12 +194,20 @@ async function collectMeetingInfo({ sourceDir, workspacePath, inputFiles = [], o
   return info;
 }
 
+function printInferredLectureConfirmation(inferred) {
+  console.log("[회의 정보] 파일명/폴더명을 기준으로 1인 강의/연수로 보입니다.");
+  console.log(`[회의 정보] 자료 유형: ${inferred.contentType}`);
+  console.log(`[회의 정보] 발화자/참석자: ${inferred.attendees.join(", ")}`);
+  console.log("[회의 정보] 수정이 필요하면 meeting_info.txt를 추가하거나 --prompt 옵션으로 다시 실행하세요.");
+}
+
 function inferMeetingInfo({ sourceDir, workspacePath, inputFiles }) {
   const joined = [sourceDir, workspacePath, ...inputFiles].join(" ");
   const isLecture = /강의|연수|수업|특강|워크숍|세미나/i.test(joined);
   const title = path.basename(inputFiles[0] ?? workspacePath, path.extname(inputFiles[0] ?? workspacePath));
   return {
     contentType: isLecture ? "1인 강의/연수" : "회의",
+    confidence: isLecture ? "high" : "low",
     title,
     attendees: isLecture ? ["강의자: 미상"] : [],
     notes: isLecture

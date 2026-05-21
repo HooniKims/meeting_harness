@@ -75,11 +75,13 @@ speakers.txt
 
 If one exists, let the CLI use it. If the CLI asks for missing fields, answer only from user-provided context. Do not invent meeting metadata.
 
-If no meeting info file exists, ask the user briefly before running when the chat context allows it:
+If no meeting info file exists and the format is unclear, ask the user briefly before running when the chat context allows it:
 
 - Is this a meeting, a one-person lecture/training, or another format?
 - Who are the key speaker(s) or participant roles, if known?
 - Are there any context notes that should affect the summary?
+
+If it is clearly a one-person lecture/training from the file name or folder name, confirm the inference briefly and proceed unless the user corrects it.
 
 If the user is not available or the CLI is running non-interactively, proceed with the CLI defaults. File names containing `강의`, `연수`, `수업`, `특강`, `워크숍`, or `세미나` should be treated as likely one-person lecture/training unless the user says otherwise.
 
