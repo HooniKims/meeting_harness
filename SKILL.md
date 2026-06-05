@@ -165,6 +165,8 @@ meeting-harness verify . --strict
 
 If running from outside the workspace, pass the full path to `meeting.md` and the workspace path to `verify`.
 
+After rendering, check the PDF page flow when practical. If pages advance while large bottom space remains, inspect the renderer for forced page breaks or over-aggressive keep-together behavior, then rerender and verify again. The PDF renderer should not insert arbitrary fixed-interval page breaks such as "every 4 sections"; content should flow naturally except for unavoidable heading/body grouping.
+
 ## Response Style
 
 Keep updates concise and concrete. Show the current step, command outcome, working folder, and final output files. Do not explain internal implementation details unless the user asks.

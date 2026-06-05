@@ -16,7 +16,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from report_common import find_font_file, parse_markdown
 
@@ -116,6 +116,7 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
         textColor=colors.HexColor("#244766"),
         spaceBefore=8,
         spaceAfter=5,
+        keepWithNext=True,
     )
     body_style = ParagraphStyle(
         "MeetingBody",
@@ -156,9 +157,7 @@ def render_pdf(markdown: str, output_path: Path, base_dir: Path) -> None:
         canvas.restoreState()
 
     story = [Paragraph(html.escape(title), title_style), Spacer(1, 5 * mm)]
-    for index, block in enumerate(blocks):
-        if index and index % 4 == 0:
-            story.append(PageBreak())
+    for block in blocks:
         story.append(Paragraph(html.escape(block.title), heading_style))
         for line in block.lines:
             stripped = line.strip()
