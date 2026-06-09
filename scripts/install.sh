@@ -16,6 +16,10 @@ BIN_DIR="${INSTALL_ROOT}/bin"
 VENV_DIR="${INSTALL_ROOT}/venv"
 VENV_PYTHON="${VENV_DIR}/bin/python"
 LAUNCHER="${BIN_DIR}/meeting-harness"
+NPM_CACHE_DIR="${INSTALL_ROOT}/npm-cache"
+FFMPEG_TOOL_DIR="${INSTALL_ROOT}/tools/ffmpeg"
+FFMPEG_BIN="${BIN_DIR}/ffmpeg"
+FFMPEG_STATIC_VERSION="${FFMPEG_STATIC_VERSION:-5.3.0}"
 
 step() {
   printf "\n==> %s\n" "$1"
@@ -57,6 +61,49 @@ ensure_venv() {
   else
     step "하네스 전용 Python 가상환경이 이미 있습니다. 건너뜁니다."
   fi
+}
+
+install_ffmpeg_with_npm() {
+  if ! has_command npm; then
+    echo "npm을 찾을 수 없어 ffmpeg 자동 설치를 계속할 수 없습니다."
+    return 1
+  fi
+
+  step "npm으로 ffmpeg를 설치합니다."
+  mkdir -p "$BIN_DIR" "$NPM_CACHE_DIR"
+  npm install \
+    --cache "$NPM_CACHE_DIR" \
+    --prefix "$FFMPEG_TOOL_DIR" \
+    "ffmpeg-static@${FFMPEG_STATIC_VERSION}"
+
+  ffmpeg_static_bin="${FFMPEG_TOOL_DIR}/node_modules/ffmpeg-static/ffmpeg"
+  if [ ! -x "$ffmpeg_static_bin" ]; then
+    echo "ffmpeg-static 설치 결과에서 실행 파일을 찾을 수 없습니다: $ffmpeg_static_bin"
+    return 1
+  fi
+
+  ln -sf "$ffmpeg_static_bin" "$FFMPEG_BIN"
+  export PATH="${BIN_DIR}:$PATH"
+}
+
+ensure_ffmpeg() {
+  if has_command ffmpeg; then
+    return 0
+  fi
+
+  step "ffmpeg가 필요합니다."
+  if has_command brew; then
+    if confirm "Homebrew로 ffmpeg를 설치할까요?"; then
+      if brew install ffmpeg; then
+        return 0
+      fi
+      echo "Homebrew ffmpeg 설치에 실패했습니다. npm fallback을 시도합니다."
+    else
+      echo "Homebrew 설치를 건너뛰고 npm fallback을 시도합니다."
+    fi
+  fi
+
+  install_ffmpeg_with_npm
 }
 
 skill_installed() {
@@ -167,20 +214,7 @@ if [ "$SKIP_PYTHON_DEPS" != "1" ]; then
     fi
   fi
 
-  if ! has_command ffmpeg; then
-    step "ffmpeg가 필요합니다."
-    if has_command brew; then
-      if confirm "Homebrew로 ffmpeg를 설치할까요?"; then
-        brew install ffmpeg
-      else
-        echo "ffmpeg 설치가 취소되었습니다."
-        exit 1
-      fi
-    else
-      echo "ffmpeg가 없고 자동 설치 도구를 찾지 못했습니다. ffmpeg를 설치한 뒤 다시 실행하세요."
-      exit 1
-    fi
-  fi
+  ensure_ffmpeg
 
   ensure_venv
 
