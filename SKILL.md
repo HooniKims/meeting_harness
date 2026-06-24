@@ -60,6 +60,12 @@ If several likely media files exist and their order is clear from names such as 
 
 If several likely media files exist and order is unclear, ask the user for the order before running.
 
+### Windows multiple-media guard
+
+When multiple media files are passed on Windows, do not assume a long transcription is correct until the audio duration is plausible. The current CLI concatenates `input/original_01.*`, `input/original_02.*`, and later inputs into `work/audio.wav` in file order, but after `[3/7] 전사` starts, compare the logged total audio duration or `work/audio.wav` duration with the sum of the source media durations when practical.
+
+If the duration matches only the first file, stop only the current harness process, create a separate combined WAV with `ffmpeg concat`, verify its duration, and rerun `meeting-harness run "<combined.wav>" --profile balanced --no-prompt`. Never modify the original media.
+
 ## Meeting Info Files
 
 The CLI automatically looks for:
@@ -73,7 +79,7 @@ speakers.txt
 참석자.txt
 ```
 
-If one exists, let the CLI use it. If the CLI asks for missing fields, answer only from user-provided context. Do not invent meeting metadata.
+If one exists, let the CLI use it. `참석자:` and `주요 안건:` may be written either on one line or as bullet lists under the field name. If the CLI asks for missing fields, answer only from user-provided context. Do not invent meeting metadata.
 
 If the CLI fails because meeting information is missing in a non-interactive shell, stop and ask the user for the missing fields. Then create `meeting_info.txt` in the media folder and rerun the same command. Required fields are:
 
@@ -91,6 +97,12 @@ If no meeting info file exists and the format is unclear, ask the user briefly b
 If it is clearly a one-person lecture/training from the file name or folder name, confirm the inference briefly and proceed unless the user corrects it.
 
 If the user is not available or the CLI is running non-interactively, proceed with the CLI defaults. File names containing `강의`, `연수`, `수업`, `특강`, `워크숍`, or `세미나` should be treated as likely one-person lecture/training unless the user says otherwise.
+
+### Noninteractive metadata guard
+
+In noninteractive PowerShell, `meeting_info.txt` may still produce "회의 정보가 부족합니다." if fields are incomplete or malformed. If the user already provided the required metadata, fix or create `meeting_info.txt`, rerun with `--no-prompt`, then inspect `config/meeting_info.json`.
+
+If the CLI defaulted the title or attendees, prefer the title, date, attendees, and notes the user gave in chat when writing `output/meeting.md`.
 
 ## Running A New Job
 
@@ -125,12 +137,14 @@ README_결과물.md
 output/meeting.md
 output/meeting.docx
 output/meeting.pdf
+output/<회의명 또는 연수명>.pdf
 output/verification_report.md
 ```
 
 Explain briefly:
 
 - `meeting.pdf`: sharing/submission file
+- `<회의명 또는 연수명>.pdf`: share-ready PDF copy created after verification, when a title is available
 - `meeting.docx`: editable report
 - `meeting.md`: canonical source for future edits
 - `verification_report.md`: output health check
@@ -154,6 +168,23 @@ Use `.meeting-harness/state.json` only to understand the current state. Do not m
 
 If no workspace was created because meeting information was missing, ask the user for the missing meeting info first instead of running `resume`.
 
+### Stale state guard
+
+During long transcription, `.meeting-harness/state.json` can lag behind the real step. Prefer stdout progress logs, live Python/ffmpeg/node processes, and the existence of `work/transcript.txt` / `work/transcript.json` over the `current_step` field.
+
+### Agent failure recovery
+
+If transcription succeeds but report generation fails with `spawn codex ENOENT`, do not restart transcription. Treat it as an agent launch failure. Use `work/transcript.txt` and `work/transcript.json` to author `output/meeting.md` manually, then run:
+
+```bash
+meeting-harness render output/meeting.md
+meeting-harness verify . --strict
+```
+
+### Strict verification guard
+
+For manual `meeting.md`, include nonempty body text directly under all required top-level sections: `회의 개요`, `전체 요약`, `회의 흐름`, `주요 안건별 논의`, `공통 의견`, `이견 및 쟁점`, `결정 사항`, `후속 조치`. Do not leave a required section with only nested headings or bullets.
+
 ## After Editing meeting.md
 
 If the user edits `output/meeting.md` and asks to regenerate the report:
@@ -166,6 +197,10 @@ meeting-harness verify . --strict
 If running from outside the workspace, pass the full path to `meeting.md` and the workspace path to `verify`.
 
 After rendering, check the PDF page flow when practical. If pages advance while large bottom space remains, inspect the renderer for forced page breaks or over-aggressive keep-together behavior, then rerender and verify again. The PDF renderer should not insert arbitrary fixed-interval page breaks such as "every 4 sections"; content should flow naturally except for unavoidable heading/body grouping.
+
+After strict verification passes, keep the canonical `output/meeting.pdf` for harness compatibility. When a user-provided meeting or training title is available, also use the title-named PDF copy in `output/` for sharing. Windows-invalid filename characters (`\ / : * ? " < > |`) are sanitized automatically. Do not delete or move `output/meeting.pdf`, `output/meeting.docx`, or `output/meeting.md`.
+
+When searching transcript timestamps in PowerShell, prefer `Select-String -SimpleMatch` or `[regex]::Escape()` over `-like "[$time*"` because `[` is a wildcard character in PowerShell patterns.
 
 ## Response Style
 

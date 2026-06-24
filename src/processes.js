@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import os from "node:os";
@@ -10,14 +10,39 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 export async function extractAudio(workspacePath) {
   const inputDir = path.join(workspacePath, "input");
   const files = await readdir(inputDir);
-  const inputs = files.filter((file) => file.startsWith("original"));
+  const inputs = files.filter((file) => file.startsWith("original")).sort();
   if (!inputs.length) throw new Error("input/original 파일을 찾을 수 없습니다.");
 
-  const input = path.join(inputDir, inputs[0]);
+  const inputPaths = inputs.map((input) => path.join(inputDir, input));
   const output = path.join(workspacePath, "work", "audio.wav");
-  await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", input, "-vn", "-ac", "1", "-ar", "16000", output], {
+  await run("ffmpeg", buildExtractAudioArgs(inputPaths, output), {
     cwd: workspacePath
   });
+}
+
+export function buildExtractAudioArgs(inputPaths, outputPath) {
+  if (!inputPaths?.length) throw new Error("입력 파일이 필요합니다.");
+  const baseArgs = ["-hide_banner", "-loglevel", "error", "-y"];
+  if (inputPaths.length === 1) {
+    return [...baseArgs, "-i", inputPaths[0], "-vn", "-ac", "1", "-ar", "16000", outputPath];
+  }
+
+  const inputArgs = inputPaths.flatMap((inputPath) => ["-i", inputPath]);
+  const concatInputs = inputPaths.map((_, index) => `[${index}:a:0]`).join("");
+  return [
+    ...baseArgs,
+    ...inputArgs,
+    "-filter_complex",
+    `${concatInputs}concat=n=${inputPaths.length}:v=0:a=1[outa]`,
+    "-map",
+    "[outa]",
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    outputPath
+  ];
 }
 
 export async function transcribeAudio(workspacePath, { model = "large-v3", computeType = "auto", language = "ko" } = {}) {
@@ -79,11 +104,26 @@ export function resolvePythonCommand() {
 
 export function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "inherit", shell: false, ...options });
+    const prepared = prepareSpawnCommand(command);
+    const child = spawn(prepared.command, args, { stdio: "inherit", shell: prepared.shell, ...options });
     child.on("error", reject);
     child.on("exit", (code) => {
       if (code === 0) resolve();
       else reject(new Error(`${command} 종료 코드 ${code}`));
     });
   });
+}
+
+function prepareSpawnCommand(command) {
+  if (process.platform !== "win32" || path.isAbsolute(command)) {
+    return { command, shell: false };
+  }
+
+  const probe = spawnSync("where.exe", [command], { encoding: "utf8" });
+  const resolved = probe.status === 0 ? probe.stdout.split(/\r?\n/).find(Boolean) : "";
+  if (!resolved) return { command, shell: false };
+  return {
+    command: resolved,
+    shell: /\.(?:cmd|bat)$/i.test(resolved)
+  };
 }

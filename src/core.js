@@ -61,20 +61,35 @@ export function formatTimestamp(date = new Date()) {
 
 export function parseMeetingInfoText(text) {
   const result = {};
+  let activeListKey = null;
+
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
-    const match = line.match(/^([^:：]+)\s*[:：]\s*(.+)$/);
-    if (!match) continue;
+
+    const listItem = line.match(/^(?:[-*]|\d+[.)])\s+(.+)$/);
+    if (listItem && activeListKey) {
+      result[activeListKey] = [...(result[activeListKey] ?? []), listItem[1].trim()];
+      continue;
+    }
+
+    const match = line.match(/^([^:：]+)\s*[:：]\s*(.*)$/);
+    if (!match) {
+      activeListKey = null;
+      continue;
+    }
 
     const rawKey = match[1].trim();
     const value = match[2].trim();
     const key = fieldMap.get(rawKey);
-    if (!key || !value) continue;
+    activeListKey = null;
+    if (!key) continue;
 
     if (key === "attendees" || key === "agenda") {
-      result[key] = splitList(value);
+      result[key] = [...(result[key] ?? []), ...splitList(value)];
+      activeListKey = key;
     } else {
+      if (!value) continue;
       result[key] = value;
     }
   }

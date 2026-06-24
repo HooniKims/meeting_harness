@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 import { detectAgent, runAgentToWriteMeeting } from "./agent.js";
-import { writeAgentInstructions, writeResultReadme } from "./artifacts.js";
+import { createShareReadyPdfCopy, writeAgentInstructions, writeResultReadme } from "./artifacts.js";
 import { detectHardwareProfile, getConfigPath, normalizeTranscriptionProfile, readHarnessConfig, recommendTranscriptionSettings, writeHarnessConfig } from "./config.js";
 import { parseMeetingInfoText } from "./core.js";
 import { createWorkspace, findReusableWorkspace, readState, writeState } from "./workspace.js";
@@ -92,10 +92,12 @@ async function runCommand(args) {
     } else {
       console.log("[2/7] 음성 추출");
       activeStep = "extract_audio";
+      await markStarted(workspace.path, activeStep);
       await extractAudio(workspace.path);
       await markCompleted(workspace.path, activeStep);
       console.log("[3/7] 전사");
       activeStep = "transcribe";
+      await markStarted(workspace.path, activeStep);
       await transcribeAudio(workspace.path, {
         model: options.model ?? transcriptionDefaults.model,
         computeType: options["compute-type"] ?? transcriptionDefaults.computeType,
@@ -107,15 +109,18 @@ async function runCommand(args) {
     if (!options["skip-agent"]) {
       console.log("[4/7] 회의록 작성");
       activeStep = "agent_write_md";
+      await markStarted(workspace.path, activeStep);
       const selectedAgent = await runAgentToWriteMeeting({ agent: preferredAgent, workspacePath: workspace.path });
       await markCompleted(workspace.path, activeStep);
       console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
       console.log("[5/7] DOCX/PDF 생성");
       activeStep = "render";
+      await markStarted(workspace.path, activeStep);
       await renderCommand([path.join(workspace.path, "output", "meeting.md")]);
       await markCompleted(workspace.path, activeStep);
       console.log("[7/7] 생성 결과 검증");
       activeStep = "verify";
+      await markStarted(workspace.path, activeStep);
       await verifyCommand([workspace.path]);
       await markCompleted(workspace.path, activeStep);
     } else {
@@ -261,6 +266,8 @@ async function verifyCommand(args) {
   const workerArgs = ["--workdir", workdir];
   if (options.strict) workerArgs.push("--strict");
   await runPythonWorker("verify_report.py", workerArgs);
+  const shareReadyPdf = await createShareReadyPdfCopy(path.resolve(workdir));
+  if (shareReadyPdf) console.log(`공유용 PDF 사본 생성: ${shareReadyPdf}`);
 }
 
 async function resumeCommand(args) {
@@ -274,8 +281,10 @@ async function resumeCommand(args) {
 
   if (step === "extract_audio") {
     const transcriptionDefaults = await getTranscriptionDefaults(options.profile ?? state.run_options?.profile);
+    await markStarted(workspacePath, "extract_audio");
     await extractAudio(workspacePath);
     await markCompleted(workspacePath, "extract_audio");
+    await markStarted(workspacePath, "transcribe");
     await transcribeAudio(workspacePath, {
       model: options.model ?? state.run_options?.model ?? transcriptionDefaults.model,
       computeType: options["compute-type"] ?? state.run_options?.compute_type ?? transcriptionDefaults.computeType,
@@ -287,6 +296,7 @@ async function resumeCommand(args) {
   }
   if (step === "transcribe") {
     const transcriptionDefaults = await getTranscriptionDefaults(options.profile ?? state.run_options?.profile);
+    await markStarted(workspacePath, "transcribe");
     await transcribeAudio(workspacePath, {
       model: options.model ?? state.run_options?.model ?? transcriptionDefaults.model,
       computeType: options["compute-type"] ?? state.run_options?.compute_type ?? transcriptionDefaults.computeType,
@@ -308,23 +318,29 @@ async function resumeCommand(args) {
       console.log("output/meeting.md 템플릿을 작성했습니다.");
       return;
     }
+    await markStarted(workspacePath, "agent_write_md");
     const selectedAgent = await runAgentToWriteMeeting({ agent: options.agent ?? "auto", workspacePath });
     await markCompleted(workspacePath, "agent_write_md");
     console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
+    await markStarted(workspacePath, "render");
     await renderCommand([path.join(workspacePath, "output", "meeting.md")]);
     await markCompleted(workspacePath, "render");
+    await markStarted(workspacePath, "verify");
     await verifyCommand([workspacePath]);
     await markCompleted(workspacePath, "verify");
     return;
   }
   if (step === "verify") {
+    await markStarted(workspacePath, "verify");
     await verifyCommand([workspacePath]);
     await markCompleted(workspacePath, "verify");
     return;
   }
   if (step === "render" || step === "ready_for_render") {
+    await markStarted(workspacePath, "render");
     await renderCommand([path.join(workspacePath, "output", "meeting.md")]);
     await markCompleted(workspacePath, "render");
+    await markStarted(workspacePath, "verify");
     await verifyCommand([workspacePath]);
     await markCompleted(workspacePath, "verify");
     return;
@@ -347,11 +363,14 @@ async function continueAfterTranscribe(workspacePath, options = {}) {
     return;
   }
 
+  await markStarted(workspacePath, "agent_write_md");
   const selectedAgent = await runAgentToWriteMeeting({ agent: options.agent ?? state.run_options?.agent ?? "auto", workspacePath });
   await markCompleted(workspacePath, "agent_write_md");
   console.log(`[4/7] 회의록 작성 완료: ${selectedAgent}`);
+  await markStarted(workspacePath, "render");
   await renderCommand([path.join(workspacePath, "output", "meeting.md")]);
   await markCompleted(workspacePath, "render");
+  await markStarted(workspacePath, "verify");
   await verifyCommand([workspacePath]);
   await markCompleted(workspacePath, "verify");
   await writeState(workspacePath, {
@@ -383,6 +402,17 @@ async function markCompleted(workspacePath, step) {
     status: "running",
     current_step: step,
     completed_steps: [...completed],
+    failed_step: null,
+    artifacts: { ...defaultArtifacts(workspacePath), ...(state.artifacts ?? {}) }
+  });
+}
+
+async function markStarted(workspacePath, step) {
+  const state = await readState(workspacePath);
+  await writeState(workspacePath, {
+    ...state,
+    status: "running",
+    current_step: step,
     failed_step: null,
     artifacts: { ...defaultArtifacts(workspacePath), ...(state.artifacts ?? {}) }
   });

@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export async function writeAgentInstructions(workspacePath, { preferredAgent = "auto" } = {}) {
@@ -9,6 +9,56 @@ export async function writeAgentInstructions(workspacePath, { preferredAgent = "
 
 export async function writeResultReadme(workspacePath) {
   await writeFile(path.join(workspacePath, "README_결과물.md"), resultReadmeBody(), "utf8");
+}
+
+export function buildShareReadyPdfFileName(title) {
+  const sanitized = String(title ?? "")
+    .normalize("NFC")
+    .replace(/[\x00-\x1f\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[ .]+$/g, "")
+    .trim()
+    .slice(0, 120);
+  return `${sanitized || "meeting"}.pdf`;
+}
+
+export async function createShareReadyPdfCopy(workspacePath) {
+  let meetingInfo = {};
+  try {
+    meetingInfo = JSON.parse(await readFile(path.join(workspacePath, "config", "meeting_info.json"), "utf8"));
+  } catch {
+    meetingInfo = {};
+  }
+
+  let markdown = "";
+  try {
+    markdown = await readFile(path.join(workspacePath, "output", "meeting.md"), "utf8");
+  } catch {
+    markdown = "";
+  }
+
+  const title = selectShareReadyPdfTitle({ meetingInfo, markdown });
+  if (!title) return null;
+
+  const fileName = buildShareReadyPdfFileName(title);
+  if (fileName === "meeting.pdf") return null;
+
+  const source = path.join(workspacePath, "output", "meeting.pdf");
+  const target = path.join(workspacePath, "output", fileName);
+  if (path.resolve(source) === path.resolve(target)) return null;
+
+  await copyFile(source, target);
+  return target;
+}
+
+export function selectShareReadyPdfTitle({ meetingInfo = {}, markdown = "" } = {}) {
+  const markdownTitle = markdown.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim() ?? "";
+  if (markdownTitle && !isGenericMeetingTitle(markdownTitle)) return markdownTitle;
+  return meetingInfo.title?.trim() || markdownTitle;
+}
+
+function isGenericMeetingTitle(title) {
+  return ["회의록", "회의 보고서", "연수 보고서", "보고서"].includes(title.trim());
 }
 
 function agentInstructionBody(preferredAgent) {
@@ -60,6 +110,7 @@ function resultReadmeBody() {
 ## 바로 제출/공유할 파일
 
 - \`output/meeting.pdf\`: 최종 회의록 PDF입니다.
+- \`output/<회의명>.pdf\`: 검증 통과 후 회의명으로 만든 공유용 PDF 사본입니다. 생성되지 않았다면 \`meeting.pdf\`를 사용하면 됩니다.
 - \`output/meeting.docx\`: 수정 가능한 회의록 문서입니다.
 - \`output/meeting.md\`: 회의록 원본 파일입니다. 수정 후 다시 보고서를 만들 수 있습니다.
 
