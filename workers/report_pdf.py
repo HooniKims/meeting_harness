@@ -181,8 +181,8 @@ def _content_table(rows: list[list[str]], styles, regular_font: str) -> LongTabl
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("LEFTPADDING", (0, 0), (-1, -1), 2.2 * mm),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2.2 * mm),
-        ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.2 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.2 * mm),
     ]
     for row_index in range(2, len(rows), 2):
         commands.append(("BACKGROUND", (0, row_index), (-1, row_index), PAPER))
