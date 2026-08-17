@@ -1,4 +1,4 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export async function writeAgentInstructions(workspacePath, { preferredAgent = "auto" } = {}) {
@@ -22,39 +22,17 @@ export function buildShareReadyPdfFileName(title) {
   return `${sanitized || "meeting"}.pdf`;
 }
 
-export async function createShareReadyPdfCopy(workspacePath) {
-  let meetingInfo = {};
-  try {
-    meetingInfo = JSON.parse(await readFile(path.join(workspacePath, "config", "meeting_info.json"), "utf8"));
-  } catch {
-    meetingInfo = {};
-  }
-
-  let markdown = "";
-  try {
-    markdown = await readFile(path.join(workspacePath, "output", "meeting.md"), "utf8");
-  } catch {
-    markdown = "";
-  }
-
-  const title = selectShareReadyPdfTitle({ meetingInfo, markdown });
-  if (!title) return null;
-
-  const fileName = buildShareReadyPdfFileName(title);
-  if (fileName === "meeting.pdf") return null;
-
-  const source = path.join(workspacePath, "output", "meeting.pdf");
-  const target = path.join(workspacePath, "output", fileName);
-  if (path.resolve(source) === path.resolve(target)) return null;
-
-  await copyFile(source, target);
-  return target;
+export function selectFinalPdfFileName({ meetingInfo = {}, markdown = "" } = {}) {
+  return buildShareReadyPdfFileName(selectShareReadyPdfTitle({ meetingInfo, markdown }));
 }
 
 export function selectShareReadyPdfTitle({ meetingInfo = {}, markdown = "" } = {}) {
   const markdownTitle = markdown.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim() ?? "";
   if (markdownTitle && !isGenericMeetingTitle(markdownTitle)) return markdownTitle;
-  return meetingInfo.title?.trim() || markdownTitle;
+  if (meetingInfo.titleSource === "inferred") return "";
+  const configTitle = meetingInfo.title?.trim() ?? "";
+  if (configTitle && !isGenericMeetingTitle(configTitle)) return configTitle;
+  return "";
 }
 
 function isGenericMeetingTitle(title) {
@@ -109,8 +87,8 @@ function resultReadmeBody() {
 
 ## 바로 제출/공유할 파일
 
-- \`output/meeting.pdf\`: 최종 회의록 PDF입니다.
-- \`output/<회의명>.pdf\`: 검증 통과 후 회의명으로 만든 공유용 PDF 사본입니다. 생성되지 않았다면 \`meeting.pdf\`를 사용하면 됩니다.
+- \`output/<회의명>.pdf\`: 회의 제목이 있을 때 생성되는 최종 PDF입니다.
+- \`output/meeting.pdf\`: 구체적인 회의 제목이 없을 때만 생성되는 최종 PDF입니다.
 - \`output/meeting.docx\`: 수정 가능한 회의록 문서입니다.
 - \`output/meeting.md\`: 회의록 원본 파일입니다. 수정 후 다시 보고서를 만들 수 있습니다.
 
@@ -119,7 +97,7 @@ function resultReadmeBody() {
 - \`work/transcript.txt\`: 전체 전사문입니다.
 - \`work/transcript.json\`: 타임스탬프와 세그먼트 정보입니다.
 - \`config/meeting_info.json\`: 회의 정보입니다.
-- \`input/original_*.ext\`: 원본 파일 복사본입니다.
+- 원본 미디어는 복사하지 않고 처음 선택한 위치의 파일을 참조합니다. 음성 추출이 끝날 때까지 원본을 이동하거나 삭제하지 마세요.
 
 ## 삭제해도 되는 파일
 

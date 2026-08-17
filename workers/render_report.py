@@ -16,17 +16,16 @@ from report_pdf import render_pdf
 def archive_existing(output_dir: Path) -> None:
     archive_dir = output_dir / "archive"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    for suffix in (".docx", ".pdf"):
-        current = output_dir / f"meeting{suffix}"
-        if not current.exists():
-            continue
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        target = archive_dir / f"meeting_{timestamp}{suffix}"
-        counter = 2
-        while target.exists():
-            target = archive_dir / f"meeting_{timestamp}_{counter}{suffix}"
-            counter += 1
-        shutil.move(str(current), str(target))
+    current = output_dir / "meeting.docx"
+    if not current.exists():
+        return
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    target = archive_dir / f"meeting_{timestamp}.docx"
+    counter = 2
+    while target.exists():
+        target = archive_dir / f"meeting_{timestamp}_{counter}.docx"
+        counter += 1
+    shutil.move(str(current), str(target))
 
 
 def add_docx_paragraph(document: Document, line: str) -> None:
@@ -73,20 +72,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="meeting.md를 DOCX/PDF로 렌더링합니다.")
     parser.add_argument("--input", required=True, help="입력 meeting.md 경로")
     parser.add_argument("--output-dir", required=True, help="출력 디렉터리")
+    parser.add_argument("--pdf-name", default="meeting.pdf", help="최종 PDF 파일명")
     args = parser.parse_args()
 
     input_path = Path(args.input).resolve()
     output_dir = Path(args.output_dir).resolve()
     if not input_path.exists():
         raise SystemExit(f"입력 파일을 찾을 수 없습니다: {input_path}")
+    pdf_name = args.pdf_name
+    if Path(pdf_name).name != pdf_name or not pdf_name.lower().endswith(".pdf"):
+        raise SystemExit(f"올바르지 않은 PDF 파일명입니다: {pdf_name}")
     output_dir.mkdir(parents=True, exist_ok=True)
     markdown = input_path.read_text(encoding="utf-8")
 
     archive_existing(output_dir)
+    for existing_pdf in output_dir.glob("*.pdf"):
+        existing_pdf.unlink()
     render_docx(markdown, output_dir / "meeting.docx")
-    render_pdf(markdown, output_dir / "meeting.pdf", Path(__file__).resolve().parents[2])
+    pdf_path = output_dir / pdf_name
+    render_pdf(markdown, pdf_path, Path(__file__).resolve().parents[2])
     print(f"DOCX 생성: {output_dir / 'meeting.docx'}")
-    print(f"PDF 생성: {output_dir / 'meeting.pdf'}")
+    print(f"PDF 생성: {pdf_path}")
     return 0
 
 

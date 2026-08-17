@@ -65,7 +65,6 @@ def check_required_files(workdir: Path, result: Verification) -> None:
     required = [
         "output/meeting.md",
         "output/meeting.docx",
-        "output/meeting.pdf",
         "work/transcript.txt",
         "work/transcript.json",
         "config/meeting_info.json",
@@ -77,6 +76,13 @@ def check_required_files(workdir: Path, result: Verification) -> None:
             result.pass_(f"{relative} 존재 확인")
         else:
             result.fail(f"{relative} 파일이 없거나 비어 있습니다.")
+    pdf_files = sorted((workdir / "output").glob("*.pdf"))
+    if len(pdf_files) == 1 and pdf_files[0].stat().st_size > 0:
+        result.pass_(f"최종 PDF 한 개 존재 확인: output/{pdf_files[0].name}")
+    elif len(pdf_files) == 0:
+        result.fail("output 폴더에 최종 PDF가 없습니다.")
+    else:
+        result.fail(f"output 폴더의 최종 PDF는 한 개여야 합니다: {len(pdf_files)}개 발견")
 
 
 def check_markdown(workdir: Path, result: Verification) -> None:
@@ -115,9 +121,10 @@ def check_docx(workdir: Path, result: Verification) -> None:
 
 
 def check_pdf(workdir: Path, result: Verification) -> None:
-    path = workdir / "output" / "meeting.pdf"
-    if not path.exists() or path.stat().st_size == 0:
+    pdf_files = sorted((workdir / "output").glob("*.pdf"))
+    if len(pdf_files) != 1 or pdf_files[0].stat().st_size == 0:
         return
+    path = pdf_files[0]
     try:
         page_count, text = extract_pdf_text(path)
     except Exception as exc:

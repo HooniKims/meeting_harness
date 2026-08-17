@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 import { detectAgent, runAgentToWriteMeeting } from "./agent.js";
-import { createShareReadyPdfCopy, writeAgentInstructions, writeResultReadme } from "./artifacts.js";
+import { selectFinalPdfFileName, writeAgentInstructions, writeResultReadme } from "./artifacts.js";
 import { detectHardwareProfile, getConfigPath, normalizeTranscriptionProfile, readHarnessConfig, recommendTranscriptionSettings, writeHarnessConfig } from "./config.js";
 import { parseMeetingInfoText } from "./core.js";
 import { createWorkspace, findReusableWorkspace, readState, writeState } from "./workspace.js";
@@ -256,8 +256,24 @@ function forwardResumeOptions(options = {}) {
 
 async function renderCommand(args) {
   const { positional, options } = parseArgs(args);
-  const input = positional[0] ?? "output/meeting.md";
-  await runPythonWorker("render_report.py", ["--input", input, "--output-dir", options["output-dir"] ?? path.dirname(input)]);
+  const input = path.resolve(positional[0] ?? "output/meeting.md");
+  const outputDir = path.resolve(options["output-dir"] ?? path.dirname(input));
+  const markdown = await readFile(input, "utf8");
+  let meetingInfo = {};
+  try {
+    meetingInfo = JSON.parse(await readFile(path.join(outputDir, "..", "config", "meeting_info.json"), "utf8"));
+  } catch {
+    meetingInfo = {};
+  }
+  const pdfName = selectFinalPdfFileName({ meetingInfo, markdown });
+  await runPythonWorker("render_report.py", [
+    "--input",
+    input,
+    "--output-dir",
+    outputDir,
+    "--pdf-name",
+    pdfName
+  ]);
 }
 
 async function verifyCommand(args) {
@@ -266,8 +282,6 @@ async function verifyCommand(args) {
   const workerArgs = ["--workdir", workdir];
   if (options.strict) workerArgs.push("--strict");
   await runPythonWorker("verify_report.py", workerArgs);
-  const shareReadyPdf = await createShareReadyPdfCopy(path.resolve(workdir));
-  if (shareReadyPdf) console.log(`공유용 PDF 사본 생성: ${shareReadyPdf}`);
 }
 
 async function resumeCommand(args) {
@@ -388,7 +402,7 @@ function defaultArtifacts(workspacePath) {
     transcript: "work/transcript.txt",
     meeting_md: "output/meeting.md",
     meeting_docx: "output/meeting.docx",
-    meeting_pdf: "output/meeting.pdf",
+    meeting_pdf: "output/*.pdf",
     verification_report: "output/verification_report.md"
   };
 }
@@ -490,9 +504,11 @@ async function collectMeetingInfo({ sourceDir, workspacePath, inputFiles = [], o
     }
   }
 
+  const titleSource = prompted.title ? "prompt" : parsed.title ? "info_file" : "inferred";
   const info = {
     contentType: prompted.contentType ?? parsed.contentType ?? inferred.contentType,
     title: prompted.title ?? parsed.title ?? inferred.title,
+    titleSource,
     dateTime: parsed.dateTime ?? "",
     location: parsed.location ?? "",
     attendees: prompted.attendees ?? parsed.attendees ?? inferred.attendees,
