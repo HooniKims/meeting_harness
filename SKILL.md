@@ -11,7 +11,7 @@ Use this skill to run the `meeting-harness` CLI for meeting recording workflows.
 
 Prefer the CLI as the execution engine. This skill interprets the user's request, chooses the right `meeting-harness` command, runs it in the target folder, and reports only useful progress and output locations.
 
-Never edit or move the original media file. The CLI creates a timestamped working folder and copies the original into `input/`.
+Never edit or move the original media file while audio extraction is pending. The CLI creates a timestamped working folder and stores source paths without copying the media bytes.
 
 ## Before Running
 
@@ -62,7 +62,7 @@ If several likely media files exist and order is unclear, ask the user for the o
 
 ### Windows multiple-media guard
 
-When multiple media files are passed on Windows, do not assume a long transcription is correct until the audio duration is plausible. The current CLI concatenates `input/original_01.*`, `input/original_02.*`, and later inputs into `work/audio.wav` in file order, but after `[3/7] 전사` starts, compare the logged total audio duration or `work/audio.wav` duration with the sum of the source media durations when practical.
+When multiple media files are passed on Windows, do not assume a long transcription is correct until the audio duration is plausible. The current CLI concatenates the referenced source paths into `work/audio.wav` in command-line order, but after `[3/7] 전사` starts, compare the logged total audio duration or `work/audio.wav` duration with the sum of the source media durations when practical. Legacy workspaces that contain `input/original_*.ext` remain supported.
 
 If the duration matches only the first file, stop only the current harness process, create a separate combined WAV with `ffmpeg concat`, verify its duration, and rerun `meeting-harness run "<combined.wav>" --profile balanced --no-prompt`. Never modify the original media.
 
@@ -136,15 +136,14 @@ After success, point the user to:
 README_결과물.md
 output/meeting.md
 output/meeting.docx
-output/meeting.pdf
-output/<회의명 또는 연수명>.pdf
+output/<회의명 또는 연수명>.pdf or output/meeting.pdf
 output/verification_report.md
 ```
 
 Explain briefly:
 
-- `meeting.pdf`: sharing/submission file
-- `<회의명 또는 연수명>.pdf`: share-ready PDF copy created after verification, when a title is available
+- `<회의명 또는 연수명>.pdf`: the single sharing/submission PDF when a specific title is available
+- `meeting.pdf`: the single fallback PDF only when no specific title is available
 - `meeting.docx`: editable report
 - `meeting.md`: canonical source for future edits
 - `verification_report.md`: output health check
@@ -196,9 +195,9 @@ meeting-harness verify . --strict
 
 If running from outside the workspace, pass the full path to `meeting.md` and the workspace path to `verify`.
 
-After rendering, check the PDF page flow when practical. If pages advance while large bottom space remains, inspect the renderer for forced page breaks or over-aggressive keep-together behavior, then rerender and verify again. The PDF renderer should not insert arbitrary fixed-interval page breaks such as "every 4 sections"; content should flow naturally except for unavoidable heading/body grouping.
+After rendering, check the PDF page flow when practical. A top-level section that fits should stay on one page. If it does not fit the remaining space, it should start on the next page; an oversized section should then split naturally, with long-table headers repeated. The renderer must not insert arbitrary fixed-interval page breaks such as "every 4 sections".
 
-After strict verification passes, keep the canonical `output/meeting.pdf` for harness compatibility. When a user-provided meeting or training title is available, also use the title-named PDF copy in `output/` for sharing. Windows-invalid filename characters (`\ / : * ? " < > |`) are sanitized automatically. Do not delete or move `output/meeting.pdf`, `output/meeting.docx`, or `output/meeting.md`.
+After strict verification passes, confirm that `output/` contains exactly one root PDF. Use the title-named PDF when a specific meeting or training title is available; otherwise use `output/meeting.pdf`. Windows-invalid filename characters (`\ / : * ? " < > |`) are sanitized automatically. Keep `output/meeting.docx` and `output/meeting.md` as editable and canonical sources.
 
 When searching transcript timestamps in PowerShell, prefer `Select-String -SimpleMatch` or `[regex]::Escape()` over `-like "[$time*"` because `[` is a wildcard character in PowerShell patterns.
 

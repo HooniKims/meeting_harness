@@ -8,7 +8,7 @@
 
 ## 무엇을 해주나요?
 
-- 원본 영상/음성 파일은 그대로 보존합니다.
+- 원본 영상/음성 파일은 복사하지 않고 처음 선택한 위치에서 참조합니다.
 - 작업 폴더를 따로 만들고 그 안에서 처리합니다.
 - 영상 파일이면 ffmpeg로 음성을 추출합니다.
 - 여러 영상/음성 파일을 넣으면 순서대로 하나의 작업용 오디오로 합쳐 전사합니다.
@@ -18,7 +18,7 @@
 - PDF 첫 페이지에 제목, 회의 정보 카드, 전체 요약을 배치합니다.
 - 본문에 번호형 섹션, 소제목, 목록, 표, 확인 필요 콜아웃을 적용합니다.
 - 모든 PDF 페이지에 머리글·바닥글과 현재 쪽/전체 쪽수를 표시합니다.
-- 검증 통과 후 회의명/연수명 기반의 공유용 PDF 사본을 추가로 만듭니다.
+- 구체적인 제목이 있으면 제목 기반 PDF를, 없으면 `meeting.pdf`를 한 개만 만듭니다.
 - Paperlogy 폰트를 PDF에 임베딩해 Windows/macOS에서도 한글이 깨지지 않도록 합니다.
 - 마지막에 결과물이 제대로 만들어졌는지 검증 보고서를 만듭니다.
 
@@ -136,7 +136,7 @@ meeting-harness run meeting.mp4 --new
 meeting-harness run part1.mp4 part2.mp4 part3.mp4
 ```
 
-여러 파일을 넣으면 작업 폴더의 `input/original_01.*`, `input/original_02.*` 순서대로 `work/audio.wav`를 만듭니다. Windows에서 긴 웨비나나 연수 파일을 처리할 때는 전사 시작 로그의 전체 오디오 길이가 원본 길이 합계와 맞는지 확인하면 좋습니다.
+여러 파일을 넣으면 명령에 전달한 원본 경로 순서대로 `work/audio.wav`를 만듭니다. 원본 자체를 작업 폴더에 복사하지 않으므로 음성 추출이 끝날 때까지 파일을 이동하거나 삭제하지 마세요. 기존 작업 폴더에 남아 있는 `input/original_*.ext` 복사본도 계속 사용할 수 있습니다. Windows에서 긴 웨비나나 연수 파일을 처리할 때는 전사 시작 로그의 전체 오디오 길이가 원본 길이 합계와 맞는지 확인하면 좋습니다.
 
 폴더명이나 파일명에 공백, 한글, 괄호가 있어도 사용할 수 있어야 합니다. 예를 들어 Windows의 `video to audio` 같은 폴더에서도 동작하도록 설계되어 있습니다.
 
@@ -228,25 +228,24 @@ meeting-harness run meeting.mp4 --profile balanced --no-prompt
 README_결과물.md
 output/meeting.md
 output/meeting.docx
-output/meeting.pdf
-output/<회의명 또는 연수명>.pdf
+output/<회의명 또는 연수명>.pdf 또는 output/meeting.pdf
 output/verification_report.md
 ```
 
 각 파일의 의미는 다음과 같습니다.
 
-- `meeting.pdf`: 제출하거나 공유하기 좋은 최종 보고서
-- `<회의명 또는 연수명>.pdf`: 검증 통과 후 자동으로 만드는 공유용 PDF 사본
+- `<회의명 또는 연수명>.pdf`: 구체적인 제목이 있을 때 만드는 최종 보고서
+- `meeting.pdf`: 구체적인 제목이 없을 때만 사용하는 기본 이름의 최종 보고서
 - `meeting.docx`: Word에서 수정 가능한 보고서
 - `meeting.md`: 이후 수정의 기준이 되는 원본 회의록
 - `verification_report.md`: 결과물 생성 상태를 확인한 검증 보고서
 - `README_결과물.md`: 초보자를 위한 결과물 설명서
 
-공유용 PDF 사본은 `output/meeting.pdf`를 그대로 둔 상태에서 추가로 만들어집니다. Windows 파일명에 사용할 수 없는 문자는 자동으로 공백 처리됩니다.
+PDF는 위 두 이름 중 하나로만 생성됩니다. 다시 렌더링할 때 `output/`에 남아 있는 이전 PDF는 정리되며, Windows 파일명에 사용할 수 없는 문자는 자동으로 공백 처리됩니다.
 
 ### PDF와 DOCX의 차이
 
-- `meeting.pdf`는 디자인이 적용된 최종본입니다. 제출하거나 공유할 때 사용합니다.
+- 제목 기반 PDF 또는 `meeting.pdf`는 디자인이 적용된 최종본입니다. 제출하거나 공유할 때 사용합니다.
 - `meeting.docx`는 Word에서 내용을 고치기 위한 편집본입니다.
 - PDF와 DOCX는 목적이 다르므로 글꼴, 표, 여백, 페이지 구성이 완전히 같지 않을 수 있습니다.
 - 내용을 수정할 때는 `meeting.md`를 기준으로 고친 뒤 PDF와 DOCX를 다시 생성하는 방식을 권장합니다.
@@ -443,5 +442,5 @@ curl -fsSL https://raw.githubusercontent.com/HooniKims/meeting_harness/main/scri
 - 긴 전사 중 `.meeting-harness/state.json`의 `current_step`이 실제 진행보다 늦게 보일 수 있습니다. 이때는 실행 로그, Python/ffmpeg 프로세스, `work/transcript.txt/json` 생성 여부를 함께 확인하세요.
 - 전사 품질을 우선하기 때문에 빠른 처리보다 정확도를 우선합니다.
 - PDF는 제출·공유용 디자인 문서이고 DOCX는 편집용 문서이므로 두 파일의 페이지 구성이 다를 수 있습니다.
-- 원본 파일은 직접 수정하지 않습니다.
+- 원본 파일은 직접 수정하거나 복사하지 않으며, 음성 추출이 끝나기 전에는 이동·삭제하지 않습니다.
 - PowerShell에서 전사 타임스탬프(`[00:10:00-00:10:04]`)를 찾을 때는 `-like`보다 `Select-String -SimpleMatch` 또는 `[regex]::Escape()`를 사용하는 편이 안전합니다.
