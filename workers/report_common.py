@@ -17,7 +17,7 @@ REQUIRED_SECTIONS = [
 ]
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class MarkdownBlock:
     level: int
     title: str
@@ -29,6 +29,8 @@ class MarkdownBlock:
 
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+METADATA_RE = re.compile(r"^[-*]\s*([^:：]+?)\s*[:：]\s*(.*?)\s*$")
+TABLE_SEPARATOR_RE = re.compile(r"^:?-{3,}:?$")
 
 
 def parse_markdown(markdown: str) -> tuple[str, list[MarkdownBlock]]:
@@ -63,6 +65,43 @@ def parse_markdown(markdown: str) -> tuple[str, list[MarkdownBlock]]:
 
 def section_map(blocks: list[MarkdownBlock]) -> dict[str, MarkdownBlock]:
     return {block.title.strip(): block for block in blocks}
+
+
+def parse_meeting_metadata(lines: list[str]) -> list[tuple[str, str]]:
+    metadata: list[tuple[str, str]] = []
+    for line in lines:
+        match = METADATA_RE.match(line.strip())
+        if match and match.group(2):
+            metadata.append((match.group(1).strip(), match.group(2).strip()))
+    return metadata
+
+
+def split_table_row(line: str) -> list[str]:
+    stripped = line.strip().strip("|")
+    return [cell.strip() for cell in stripped.split("|")]
+
+
+def parse_markdown_table(
+    lines: list[str], start: int
+) -> tuple[list[list[str]], int] | None:
+    if start + 1 >= len(lines) or "|" not in lines[start]:
+        return None
+    header = split_table_row(lines[start])
+    separator = split_table_row(lines[start + 1])
+    if len(header) < 2 or len(separator) != len(header):
+        return None
+    if not all(TABLE_SEPARATOR_RE.fullmatch(cell.replace(" ", "")) for cell in separator):
+        return None
+
+    rows = [header]
+    index = start + 2
+    while index < len(lines) and "|" in lines[index]:
+        row = split_table_row(lines[index])
+        if len(row) != len(header):
+            break
+        rows.append(row)
+        index += 1
+    return rows, index
 
 
 def find_font_file(base_dir: Path, weight_fragment: str = "4Regular") -> Path | None:
