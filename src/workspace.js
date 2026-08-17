@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { buildWorkspaceName } from "./core.js";
@@ -24,12 +24,6 @@ export async function createWorkspace({ inputFiles, baseDir = process.cwd(), now
   );
   for (const relative of workspaceDirs) {
     await mkdir(path.join(workspaceBase, relative), { recursive: true });
-  }
-
-  for (const [index, input] of inputFiles.entries()) {
-    const ext = path.extname(input);
-    const name = inputFiles.length === 1 ? `original${ext}` : `original_${String(index + 1).padStart(2, "0")}${ext}`;
-    await copyFile(input, path.join(workspaceBase, "input", name));
   }
 
   const state = {

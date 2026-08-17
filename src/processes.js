@@ -1,23 +1,41 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readState } from "./workspace.js";
+
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 export async function extractAudio(workspacePath) {
-  const inputDir = path.join(workspacePath, "input");
-  const files = await readdir(inputDir);
-  const inputs = files.filter((file) => file.startsWith("original")).sort();
-  if (!inputs.length) throw new Error("input/original 파일을 찾을 수 없습니다.");
-
-  const inputPaths = inputs.map((input) => path.join(inputDir, input));
+  const inputPaths = await resolveWorkspaceInputPaths(workspacePath);
   const output = path.join(workspacePath, "work", "audio.wav");
   await run("ffmpeg", buildExtractAudioArgs(inputPaths, output), {
     cwd: workspacePath
   });
+}
+
+export async function resolveWorkspaceInputPaths(workspacePath) {
+  const inputDir = path.join(workspacePath, "input");
+  const legacyFiles = (await readdir(inputDir))
+    .filter((file) => file.startsWith("original"))
+    .sort()
+    .map((file) => path.join(inputDir, file));
+  if (legacyFiles.length) return legacyFiles;
+
+  const state = await readState(workspacePath);
+  const sourceFiles = Array.isArray(state.source_files) ? state.source_files : [];
+  if (!sourceFiles.length) throw new Error("원본 미디어 경로를 찾을 수 없습니다.");
+  for (const sourceFile of sourceFiles) {
+    try {
+      if (!(await stat(sourceFile)).isFile()) throw new Error();
+    } catch {
+      throw new Error(`원본 미디어 파일을 찾을 수 없습니다: ${sourceFile}`);
+    }
+  }
+  return sourceFiles;
 }
 
 export function buildExtractAudioArgs(inputPaths, outputPath) {
