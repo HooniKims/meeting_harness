@@ -62,9 +62,9 @@ def build_pdf_styles(regular_font: str, bold_font: str) -> dict[str, ParagraphSt
         parent=base["BodyText"],
         fontName=regular_font,
         fontSize=9.5,
-        leading=15,
+        leading=14.5,
         textColor=BODY,
-        spaceAfter=3.5 * mm,
+        spaceAfter=3 * mm,
         splitLongWords=False,
     )
     return {
@@ -108,12 +108,12 @@ def build_pdf_styles(regular_font: str, bold_font: str) -> dict[str, ParagraphSt
         "body": body,
         "bullet": ParagraphStyle(
             "MeetingBullet", parent=body, leftIndent=6 * mm,
-            firstLineIndent=-4 * mm, bulletIndent=1.2 * mm, spaceAfter=1.8 * mm,
+            firstLineIndent=-4 * mm, bulletIndent=1.2 * mm, spaceAfter=1.5 * mm,
         ),
         "ordered": ParagraphStyle(
             "MeetingOrdered", parent=body, leftIndent=7 * mm,
             firstLineIndent=-5 * mm, bulletIndent=0, bulletFontName=bold_font,
-            bulletFontSize=9.5, spaceAfter=1.8 * mm,
+            bulletFontSize=9.5, spaceAfter=1.5 * mm,
         ),
         "table_head": ParagraphStyle(
             "TableHead", parent=body, fontName=bold_font, fontSize=8,

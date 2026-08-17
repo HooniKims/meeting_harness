@@ -115,11 +115,87 @@ test("render_pdf numbers every page against the final page count", async (t) => 
   const rendered = await renderPdf(t, markdown);
   assert.ok(rendered.pages.length >= 3);
   const total = String(rendered.pages.length).padStart(2, "0");
+  const sectionPage = rendered.pages.findIndex((page) => page.text.includes("후속 조치"));
+  assert.ok(sectionPage >= 1);
   rendered.pages.forEach((page, index) => {
     const current = String(index + 1).padStart(2, "0");
     assert.match(page.text, new RegExp(`${current}\\s*\\/\\s*${total}`));
     assert.match(page.text, /MEETING HARNESS/);
     assert.match(page.text, /장문 회의록/);
+  });
+  rendered.pages.slice(sectionPage).forEach((page) => {
     assert.match(page.text, /번호\s+담당\s+내용/, "table header must repeat on each page");
+  });
+});
+
+test("render_pdf keeps a short top-level section on one page", async (t) => {
+  const filler = Array.from(
+    { length: 15 },
+    (_, index) => `- 준비 항목 ${index + 1}: 운영 절차와 참여자 안내 내용을 점검하고 공유하였다.`
+  );
+  const markdown = [
+    "# 페이지 흐름 검증 회의록",
+    "",
+    "## 회의 개요",
+    "- 일시: 2026-08-17",
+    "",
+    "## 전체 요약",
+    "페이지 흐름을 검증한다.",
+    "",
+    "## 주요 논의",
+    ...filler,
+    "",
+    "## 후속 조치",
+    "FOLLOW-UP-1",
+    "FOLLOW-UP-2",
+    "FOLLOW-UP-3",
+    "FOLLOW-UP-4"
+  ].join("\n");
+
+  const rendered = await renderPdf(t, markdown);
+  const sectionPages = rendered.pages.filter(
+    (page) => page.text.includes("후속 조치") || page.text.includes("FOLLOW-UP-")
+  );
+  assert.equal(sectionPages.length, 1);
+  for (let index = 1; index <= 4; index += 1) {
+    assert.match(sectionPages[0].text, new RegExp(`FOLLOW-UP-${index}`));
+  }
+});
+
+test("render_pdf starts an oversized top-level section on a new page and then splits it", async (t) => {
+  const filler = Array.from(
+    { length: 8 },
+    (_, index) => `- 준비 항목 ${index + 1}: 운영 절차와 참여자 안내 내용을 점검하고 공유하였다.`
+  );
+  const tableRows = Array.from(
+    { length: 60 },
+    (_, index) => `| ${index + 1} | 담당 ${index + 1} | LARGE-ROW-${String(index + 1).padStart(3, "0")} 실행 결과를 공유한다. |`
+  );
+  const markdown = [
+    "# 대단원 흐름 검증 회의록",
+    "",
+    "## 회의 개요",
+    "- 일시: 2026-08-17",
+    "",
+    "## 전체 요약",
+    "페이지 흐름을 검증한다.",
+    "",
+    "## 주요 논의",
+    ...filler,
+    "",
+    "## 후속 조치",
+    "| 번호 | 담당 | 내용 |",
+    "|---:|---|---|",
+    ...tableRows
+  ].join("\n");
+
+  const rendered = await renderPdf(t, markdown);
+  const pageOf = (marker) => rendered.pages.findIndex((page) => page.text.includes(marker));
+  const sectionPage = pageOf("후속 조치");
+  assert.ok(sectionPage > pageOf("준비 항목 8"));
+  assert.equal(pageOf("LARGE-ROW-001"), sectionPage);
+  assert.ok(pageOf("LARGE-ROW-060") > sectionPage);
+  rendered.pages.slice(sectionPage).forEach((page) => {
+    assert.match(page.text, /번호\s+담당\s+내용/);
   });
 });
