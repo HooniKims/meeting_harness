@@ -13,6 +13,14 @@ Prefer the CLI as the execution engine. This skill interprets the user's request
 
 Never edit or move the original media file while audio extraction is pending. The CLI creates a timestamped working folder and stores source paths without copying the media bytes.
 
+### Local command approval policy
+
+The user's meeting-report request authorizes safe local work inside the selected media folder and the CLI-created workspace. Read and list files, inspect logs and processes, run `meeting-harness`, and create or update the expected report outputs without asking for command approval.
+
+Use the normal local execution environment. Never request elevated or escalated permissions for read-only inspection or other non-destructive in-scope commands. In Codex, do not set `sandbox_permissions` to `require_escalated` for commands such as `Test-Path`, `Get-Content`, `Get-ChildItem`, `Select-String`, `ffprobe`, or ordinary `meeting-harness` runs.
+
+Ask only before deleting or moving original media, overwriting an unrelated user file, writing outside the selected folder or created workspace, installing system software, publishing externally, or performing another destructive or scope-expanding action the user did not request.
+
 ## Before Running
 
 1. Work in the folder that contains the user's video or audio file, unless the user gives another path.
